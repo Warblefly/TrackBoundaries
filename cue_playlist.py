@@ -3,10 +3,13 @@
 import subprocess, argparse, os.path
 
 FFMPEG = "/usr/local/bin/ffmpeg"
+#TESTFILE = "/mnt/6TB-OCT2018/3TB-BACKUP/MUSIC/Acid Jazz Grooves/CD1/08 - Lionel Moist Sextet - Chillin'.mp3"
 
-def analyse(filename, volDrop=11):
+
+def analyse(filename, volDrop=8, volStart=40):
     # Analyses file in filename, returns seconds to end-of-file of place where volume last drops to level
     # below average loudness, given in volDrop in LU.
+    # Also determines file start, where monentary loudness leaps above a certain point given by volStart
 
     # Make a list containing many points, 1/10 sec apart, where loudness is measured.
     # We need TIME and MOMENTARY LOUDNESS
@@ -18,17 +21,14 @@ def analyse(filename, volDrop=11):
     test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-i", filename, "-vn", "-af", "ebur128", "-f", "null", "null"], \
             stderr=subprocess.STDOUT)).split('\\n')
     measure = []
-
-    # Here, we spot the figures we need, in the wider FFmpeg EBU R.128 output
-    
+    #print(test[:-14])
     for item in test[:-14]:
         if  item.startswith("[Parsed_ebur128"):
             #print(item, item[-86:-74], item[-53:-47])
             measure.append([float(item[-86:-74].strip()), float(item[-53:-47].strip())])
 
-    # measure now contains a list of lists-of-floats: each item is [[time],[loudness]]
+    # measure now contains a list of lists-of-floats: each item is [time],[loudness]
 
-    # This data, at the end of FFmpeg's output, also contains audio duration.
     loudness = float(test[-9].split()[1])
     duration = float(measure[-1][0])
 #    for item in measure:
@@ -36,13 +36,35 @@ def analyse(filename, volDrop=11):
 
     print("Overall loudness is: %f" % loudness)
 
-    # Now we must find the last timestamp where the instantaneous loudness is volDrop LU below the track's
+    # First, let us find the first timestamp where the momentary loudness is volStart below the
+    # track's overall loudness level. That level is cueLevel
+
+    print("Desired start detection volume is %f" % volStart)
+    cueLevel = loudness - volStart
+    print("We're looking for %f LUFS volume." % cueLevel)
+    # Set a sensible default if we can't find a start
+    ebuCueTime=0.0
+
+    for item in measure:
+        if item[1] > cueLevel:
+            ebuCueTime = item[0]
+            break
+    # The EBU R.128 algorithm measures in 400ms blocks. Therefore, it marks 0.4s as the
+    # start of the track, even if its audio begins at 0.0s. So, we must subtract 400ms
+    # from the given time, then use either that time, or 0.0s (if the result is negative)
+    # as our track starting point.
+    cueTime = max(0, ebuCueTime-0.4)
+
+    print("Starting next track from cue point: %f" % cueTime)
+
+    # Now we must find the last timestamp where the momentary loudness is volDrop LU below the track's
     # overall loudness level. That level is nextLevel.
     # We'll reverse the list
     measure.reverse()
     print("Desired volume lowering is %f" % volDrop)
     nextLevel = loudness - volDrop
     print("We're looking for %f LUFS volume." % nextLevel)
+    # Set a sensible default if we can't find a drop
     nextTime=0.0
 
     for item in measure:
@@ -51,17 +73,20 @@ def analyse(filename, volDrop=11):
             break
 
     print("Starting next track at time: %f which is %f before end." % (nextTime, duration-nextTime))
-    return(duration-nextTime)
+    return({"start_next": duration-nextTime, "cue_point": cueTime})
 
 # What's the command?
-parser = argparse.ArgumentParser(description="Create end-of-track annotation for playlist.")
+parser = argparse.ArgumentParser(description="Create start and end-of-track annotations for playlist.",
+        epilog="For support, contact john@johnwarburton.net")
 parser.add_argument("playlist", help="Playlist file to be processed")
-parser.add_argument("-l", "--level",  help="LU below average loudness to trigger next track.", default=11)
-parser.add_argument("-o", "--output", help="Output filename (default: '-proc' suffix)")
+parser.add_argument("-l", "--level",  help="LU below average loudness to trigger next track.", default=8, type=float)
+parser.add_argument("-c", "--cue", help="LU below average loudness for track cue-in point", default=40, type=float)
+parser.add_argument("-o", "--output", help="Output filename (default: '-proc' suffix)", type=str)
 args = parser.parse_args()
 
 playlist = args.playlist
 level = float(args.level)
+cue = float(args.cue)
 
 # Construct default output filename if needed
 if args.output:
@@ -79,14 +104,17 @@ with open(playlist) as i:
 print("We have read %s items." % len(playlistLines))
 
 with open(outfile, mode="w") as out:
-    
-    # Create a new playlist file, with the liquidsoap "annotate" protocol showing where to
-    # start the next track, for each track in the playlist
-    
+
     for item in playlistLines:
-        timeRemaining = analyse(item.strip(), level)
-        assembly = 'annotate:' + 'liq_start_next="' + '{:.1f}'.format(timeRemaining) + '":' + item
+        result = analyse(item.strip(), level, cue)
+        timeRemaining = result["start_next"]
+        cuePoint = result["cue_point"]
+
+        assembly = 'annotate:' + 'liq_cue_in="' + '{:.1f}'.format(cuePoint) + '",' + 'liq_start_next="' + '{:.1f}'.format(timeRemaining) + '":' + item
         print("Writing line:")
         print(assembly)
         out.write(assembly)
 print("Done.")
+
+
+
