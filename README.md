@@ -1,5 +1,7 @@
 # TrackEndDetect
-Automatically detects an audio fade out, and notates a liquidaudio playlist accordingly
+Automatically detects the boundary between silence and the start of an audio track. Also, detects audio fade out, and notates a liquidaudio playlist accordingly, with both cue points.
+
+Detection is based on a certain level of Loudness Units (LU) below the track's measured integrated loudness, according to EBU R.128 calculations. This is no mere "meter reader".
 
 The fine multimedia automation software liquidsoap, which is the backbone of several user-friendly radio production operations, allows crossfading between sources.
 
