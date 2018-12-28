@@ -24,6 +24,7 @@ myplaylist = crossfade(fade_out=0.01, fade_in=0.01, conservative=false,  myplayl
 radio = fallback(track_sensitive = false, [myplaylist, security])
 
 # Here, we use FFmpeg to process the audio, and convert it ready for transmission.
+# The built-in fdkaac encoder, for reasons I don't understand yet, distorts when using AAC HE v2 encoding only.
 # It does not exit cleanly, for reasons I don't understand yet.
 #
 # We could use output.external, but metadata (e.g. what's playing) doesn't get transferred that way.
