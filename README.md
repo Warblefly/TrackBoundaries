@@ -15,5 +15,7 @@ It is currently in test, but works. Run the command with '-h' to get help, or re
 
 The two lines in a Liquidsoap script that do the magic are as follows. I've left lots of buffer room, and do not fade the audio at all, instead allowing the detection of audio levels to allow the track's own fade-out and start levels to do the job.
 
+```
 myplaylist = cue_cut(playlist(length=60.0, "[YOURPLAYLIST]"))
 myplaylist = crossfade(fade_out=0.01, fade_in=0.01, conservative=false,  myplaylist)
+```
