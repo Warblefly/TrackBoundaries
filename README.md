@@ -1,5 +1,5 @@
 # TrackBoundaries
-Automatically detects the boundary between silence and the start of an audio track. Also, detects audio fade out, and notates a liquidaudio playlist accordingly, with both cue points.
+Automatically detects the boundary between silence and the start of an audio track. Also, detects audio fade out, and notates a liquidsoap playlist accordingly, with both cue points.
 
 Detection is based on a certain level of Loudness Units (LU) below the track's measured integrated loudness, according to EBU R.128 calculations. This is no mere "meter reader".
 
