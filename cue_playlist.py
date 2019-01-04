@@ -30,7 +30,16 @@ def analyse(filename, volDrop=8, volStart=40):
     # measure now contains a list of lists-of-floats: each item is [time],[loudness]
 
     loudness = float(test[-9].split()[1])
-    duration = float(measure[-1][0])
+
+    # Get duration. It's the second item in the -13th line returned from
+    # the FFmpeg process, in the list of lines named 'test'
+    print("Stats line is %s" % test[-14])
+    partiallyParsedDuration = test[-14].split()[1].split("=")[1]
+    print("Duration line is %s" % partiallyParsedDuration)
+    hmsSplit = partiallyParsedDuration.split(":")
+    duration = float(int(hmsSplit[0])*3600 + int(hmsSplit[1])*60 + float(hmsSplit[2]))
+    print("Duration is %f" % duration)
+#    duration = float(measure[-1][0])
 #    for item in measure:
 #        print("time: %f, loudness: %f" % (item[0], item[1]))
 
@@ -73,7 +82,7 @@ def analyse(filename, volDrop=8, volStart=40):
             break
 
     print("Starting next track at time: %f which is %f before end." % (nextTime, duration-nextTime))
-    return({"start_next": duration-nextTime, "cue_point": cueTime})
+    return({"start_next": duration-nextTime, "cue_point": cueTime, "duration": duration})
 
 # What's the command?
 parser = argparse.ArgumentParser(description="Create start and end-of-track annotations for playlist.",
@@ -109,8 +118,12 @@ with open(outfile, mode="w") as out:
         result = analyse(item.strip(), level, cue)
         timeRemaining = result["start_next"]
         cuePoint = result["cue_point"]
+        duration = result["duration"]
 
-        assembly = 'annotate:' + 'liq_cue_in="' + '{:.1f}'.format(cuePoint) + '",' + 'liq_start_next="' + '{:.1f}'.format(timeRemaining) + '":' + item
+        assembly = 'annotate:' + 'liq_cue_in="' + '{:.1f}'.format(cuePoint) \
+                + '",' + 'liq_start_next="' + '{:.1f}'.format(timeRemaining) \
+                + '",' + 'duration="' + str(duration) \
+                + '":' + item
         print("Writing line:")
         print(assembly)
         out.write(assembly)
