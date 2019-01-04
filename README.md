@@ -1,5 +1,5 @@
 # TrackBoundaries
-Automatically detects the boundary between silence and the start of an audio track. Also, detects audio fade out, and notates a liquidsoap playlist accordingly, with both cue points.
+Automatically detects the boundary between silence and the start of an audio track. Also, detects audio fade out, and notates a liquidsoap playlist accordingly, with both cue points. Also annotates the same playlist with accurately measured track durations.
 
 Detection is based on a certain level of Loudness Units (LU) below the track's measured integrated loudness, according to EBU R.128 calculations. This is no mere "meter reader".
 
@@ -15,7 +15,9 @@ It is currently in test, but works. Run the command with '-h' to get help, or re
 
 The two lines in a Liquidsoap script that do the magic are as follows. I've left lots of buffer room, and do not fade the audio at all, instead allowing the detection of audio levels to allow the track's own fade-out and start levels to do the job.
 
-The files contained in this repository permit a complete, mixed, radio station with high-quality, controlled, audio output suitable for onward distribution. Except the hourly news bursts in without fades. I'm working on this.
+The files contained in this repository permit a complete, mixed, radio station with high-quality, controlled, audio output suitable for onward distribution.
+
+There are also example files for a crontab and 'expect' scripts to insert hourly, up-to-date news bulletins into the stream.
 
 ```
 myplaylist = cue_cut(playlist(length=60.0, "[YOURPLAYLIST]"))
