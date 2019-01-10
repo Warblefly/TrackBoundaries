@@ -1,6 +1,10 @@
 #!~/.opam/system/bin/liquidsoap
 
 # Make a log
+set("scheduler.fast_queues", 2)
+set("scheduler.generic_queues", 5)
+set("scheduler.non_blocking_queues", 4)
+set("scheduler.log", true)
 set("log.file.path", "/tmp/basic-radio.log")
 set("server.telnet", true)
 set("server.telnet.bind_addr", "127.0.0.1")
@@ -8,7 +12,9 @@ set("server.telnet.port", 1234)
 set("server.timeout", -1.0)
 set("decoder.file_extensions.ffmpeg",["mp3","mp4","m4a","wav","flac","ogg","webm","opus","mka"])
 set("protocol.external.curl", "/usr/bin/curl")
-set("ffmpeg.log.verbosity", "verbose")
+set("frame.audio.samplerate", 32000)
+set("request.metadata_decoders.duration", false)
+#set("ffmpeg.log.verbosity", "verbose")
 
 
 # My function to break for news. Copied from
@@ -28,38 +34,27 @@ def break.news(~input,f)
         b
     end
     def transition2(a,b) =
-        source.skip(b)
-        add ([fade.initial(duration=2.0,type="exp",b), a])
+        #source.skip(b)
+        add ([fade.initial(duration=0.01,type="exp",b), a])
     end
-    fallback(track_sensitive=false,transitions=[transition1,transition2],[input,f])
+    fallback(track_sensitive=true,transitions=[transition1,transition2],[input,f])
 end
 
 
-security = single("fault.flac")
+security = single("/home/john/src/radio/fault.flac")
 
 # Here's the playlist, cut as per our Python pre-production program dictates
 
-myplaylist = cue_cut(playlist(length=60.0, "YOUR_PLAYLIST.m3u8"))
+myplaylist = amplify(override="liq_amplify", 1.0, cue_cut(playlist(length=60.0, "/home/john/src/radio/B2-mod.m3u8")))
 
-# Now do the crossfades. Each track's end is determined by its fade-out
-# given by the Python program, so they can overlap without clashing too much.
-#
-# The file named "irn.mp3" is obtained by curl run from a cron job each hour
-news=switch(
-    track_sensitive=true,
-        [(
-            {29m30s}, normalize(audio_to_stereo(single("/home/john/src/radio/irn.mp3")))
-            
-        )]
-    )
+# Inject news bulletins collected via crontab, inserted by an expect script
 
-myplaylist = break.news(input=news, myplaylist)
-#
+myplaylist = break.news(input=request.queue(id="override"), myplaylist)
+
+# Make nice
+
 myplaylist = crossfade(fade_out=0.01, fade_in=0.01, conservative=true,  myplaylist)
-#myplaylist = break.news(input=news, myplaylist)
 
-# Make the playlist secure
-#
 radio = fallback(track_sensitive = false, [myplaylist, security])
 
 # Here, we use FFmpeg to process the audio, and convert it ready for transmission.
@@ -71,6 +66,7 @@ radio = fallback(track_sensitive = false, [myplaylist, security])
 # target of -14LUFS.
 # The AAC stream is at about 38 kbit/s (variable), so should work almost everywhere.
 
-output.icecast(description="Experimental stream using Liquidsoap", genre="Freeform", name="Music Too", host="127.0.0.1", port=8000, mount="audio.aac", format="audio/aac", password="YOUR_PASSWORD", %external(samplerate=44100, channels=2, process="ffmpeg -i pipe:0 -acodec libfdk_aac -vbr 2 -profile:a aac_he_v2 -vn -af dynaudnorm=g=13:m=70,asetnsamples=2048,volume=-18dB,mcompand='0.005\,0.1 6 -47/-40\,-34/-34\,-17/-33 100 | 0.003\,0.05 6 -47/-40\,-34/-34\,-17/-33 400 | 0.000625\,0.0125 6 -47/-40\,-34/-34\,-15/-33 1600 | 0.0001\,0.025 6 -47/-40\,-34/-34\,-31/-31\,-0/-30 6400 | 0\,0.025 6 -38/-31\,-28/-28\,-0/-25 22000',volume=+20dB,alimiter=-4dB,loudnorm=I=-14:LRA=5:TP=-0.5:linear=0,aresample=44100 -f adts pipe:1"), radio)
+output.icecast(description="Experimental stream using Liquidsoap", genre="[YOUR GENRE]", name="[YOUR NAME]", host="[YOUR HOST]", port=8000, mount="audio.aac", public=true, url="[FULL URL OF STREAM]", format="audio/aac", password="[YOUR_PASSWORD]", %external(samplerate=32000, channels=2, process="ffmpeg -err_detect ignore_err -report -f s16le -ar 32000 -ac 2 -i pipe:0 -acodec libfdk_aac -vbr 1 -profile:a aac_he_v2 -vn -af dynaudnorm=g=31:m=70:r=1.0,asetnsamples=2048,volume=-18dB,mcompand='0.005\,0.1 6 -47/-40\,-34/-34\,-17/-33 100 | 0.003\,0.05 6 -47/-40\,-34/-34\,-17/-33 400 | 0.000625\,0.0125 6 -47/-40\,-34/-34\,-15/-33 1600 | 0.0001\,0.025 6 -47/-40\,-34/-34\,-31/-31\,-0/-30 6400 | 0\,0.025 6 -38/-31\,-28/-28\,-0/-25 15999',volume=+20dB,alimiter=-4dB,loudnorm=I=-14:LRA=6.0:TP=-0.25:linear=0,aresample=32000 -f adts pipe:1"), radio)
+
 
 
