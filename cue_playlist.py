@@ -6,7 +6,7 @@ FFMPEG = "/usr/local/bin/ffmpeg"
 #TESTFILE = "/mnt/6TB-OCT2018/3TB-BACKUP/MUSIC/Acid Jazz Grooves/CD1/08 - Lionel Moist Sextet - Chillin'.mp3"
 
 
-def analyse(filename, volDrop=8, volStart=40):
+def analyse(filename, volDrop=10, volStart=40):
     # Analyses file in filename, returns seconds to end-of-file of place where volume last drops to level
     # below average loudness, given in volDrop in LU.
     # Also determines file start, where monentary loudness leaps above a certain point given by volStart
@@ -82,13 +82,13 @@ def analyse(filename, volDrop=8, volStart=40):
             break
 
     print("Starting next track at time: %f which is %f before end." % (nextTime, duration-nextTime))
-    return({"start_next": duration-nextTime, "cue_point": cueTime, "duration": duration})
+    return({"start_next": duration-nextTime, "cue_point": cueTime, "duration": duration, "loudness": loudness})
 
 # What's the command?
 parser = argparse.ArgumentParser(description="Create start and end-of-track annotations for playlist.",
         epilog="For support, contact john@johnwarburton.net")
 parser.add_argument("playlist", help="Playlist file to be processed")
-parser.add_argument("-l", "--level",  help="LU below average loudness to trigger next track.", default=8, type=float)
+parser.add_argument("-l", "--level",  help="LU below average loudness to trigger next track.", default=10, type=float)
 parser.add_argument("-c", "--cue", help="LU below average loudness for track cue-in point", default=40, type=float)
 parser.add_argument("-o", "--output", help="Output filename (default: '-proc' suffix)", type=str)
 args = parser.parse_args()
@@ -119,10 +119,14 @@ with open(outfile, mode="w") as out:
         timeRemaining = result["start_next"]
         cuePoint = result["cue_point"]
         duration = result["duration"]
+        # Here, we calculate replayGain by subtracting the actual loudness of the track from -14
+        # because -14LUFS is our internal standard for loudness
+        replayGain = (-14) - result["loudness"]
 
         assembly = 'annotate:' + 'liq_cue_in="' + '{:.1f}'.format(cuePoint) \
                 + '",' + 'liq_start_next="' + '{:.1f}'.format(timeRemaining) \
                 + '",' + 'duration="' + str(duration) \
+                + '",' + 'liq_amplify="' + '{:.1f}'.format(replayGain) + "dB" \
                 + '":' + item
         print("Writing line:")
         print(assembly)
