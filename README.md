@@ -1,5 +1,5 @@
 # TrackBoundaries
-Automatically detects the boundary between silence and the start of an audio track. Also, detects audio fade out, and notates a liquidsoap playlist accordingly, with both cue points. Also annotates the same playlist with accurately measured track durations.
+Automatically detects the boundary between silence and the start of an audio track. Also, detects audio fade out, and notates a liquidsoap playlist accordingly, with both cue points. Also annotates the same playlist with accurately measured track durations. Also measures EBU R.128 volume of track, for use with ReplayGain within liquidsoap.
 
 Detection is based on a certain level of Loudness Units (LU) below the track's measured integrated loudness, according to EBU R.128 calculations. This is no mere "meter reader".
 
@@ -23,3 +23,5 @@ There are also example files for a crontab and 'expect' scripts to insert hourly
 myplaylist = cue_cut(playlist(length=60.0, "[YOURPLAYLIST]"))
 myplaylist = crossfade(fade_out=0.01, fade_in=0.01, conservative=true,  myplaylist)
 ```
+
+I have altered the liquidsoap script to sample audio at 32,000Hz. This is one of the specificied HE-AACv2 sample rates, and allows better quality audio in stereo at the lowest bit-rates e.g. 32kbit/s.
