@@ -167,7 +167,7 @@ print("We have read %s items." % len(playlistLines))
 with open(outfile, mode="w") as out:
 
     for item in playlistLines:
-        result = analyse(item.strip(), level, cue, mezzanine)
+        result = analyse(filename=item.strip(), volDrop=level, volStart=cue, mezzanine=mezzanine, forceEncode=False)
         timeRemaining = result["start_next"]
         cuePoint = result["cue_point"]
         duration = result["duration"]
