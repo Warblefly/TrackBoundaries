@@ -1,5 +1,5 @@
 # TrackBoundaries
-Automatically detects the boundary between silence and the start of an audio track. Also, detects audio fade out, and notates a liquidsoap playlist accordingly, with both cue points. Also annotates the same playlist with accurately measured track durations. Also measures EBU R.128 volume of track, for use with ReplayGain within liquidsoap.
+Automatically detects the boundary between silence and the start of an audio track. Also, detects audio fade out, and notates a liquidsoap playlist accordingly, with both cue points. Also annotates the same playlist with accurately measured track durations. Also measures EBU R.128 volume of track, for use with ReplayGain within liquidsoap. Also optionally converts file to a mezzanine format, simplifying replay, while embedding useful metadata within the mezzanine file and creating a unique filename.
 
 Detection is based on a certain level of Loudness Units (LU) below the track's measured integrated loudness, according to EBU R.128 calculations. This is no mere "meter reader".
 
