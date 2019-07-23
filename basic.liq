@@ -63,13 +63,6 @@ myplaylist = crossfade(fade_out=0.01, fade_in=0.01, default=(fun(a,b)->add(norma
 
 radio = fallback(track_sensitive = false, [myplaylist, security])
 
-# Register with liquidsoap directory
-
-#radio = register_flow(radio="Music Too", website="http://warblefly.sytes.net/", 
-#    description="Freeform: jazz, pop, folk, library music", genre="Freeform", 
-#    streams=[("aac/40k", "http://warblefly.sytes.net:8000/audio.aac")],
-#    radio)
-
 # Here, we use FFmpeg to process the audio, and convert it ready for transmission.
 # It does not exit cleanly, for reasons I don't understand yet.
 #
@@ -79,10 +72,10 @@ radio = fallback(track_sensitive = false, [myplaylist, security])
 # target of -14LUFS.
 # The AAC stream is at about 38 kbit/s (variable), so should work almost everywhere.
 
-output.icecast(description="Experimental stream using Liquidsoap", genre="Freeform", name="Music Too", host="127.0.0.1", port=8000, mount="audio.aac", public=true, url="http://warblefly.sytes.net:8000/audio.aac", timeout=240.0, format="audio/aac", password="T6h£mPOOsx", %external(samplerate=32000, channels=2, process="ffmpeg -f s16le -ar 32000 -ac 2 -i pipe:0 -acodec libfdk_aac -vbr 1 -profile:a aac_he_v2 -vn -af dynaudnorm=g=7:m=70:r=1.0:c=1:b=1,asetnsamples=2048,volume=-18dB,mcompand='0.005\,0.1 6 -47/-40\,-34/-34\,-17/-33 100 | 0.003\,0.05 6 -47/-40\,-34/-34\,-17/-33 400 | 0.000625\,0.0125 6 -47/-40\,-34/-34\,-15/-33 1600 | 0.0001\,0.025 6 -47/-40\,-34/-34\,-31/-31\,-0/-30 6400 | 0\,0.025 6 -38/-31\,-28/-28\,-0/-25 15999',volume=+20dB,alimiter=limit=-4dB:asc=1,dynaudnorm=r=1.0:p=0.99:b=1:c=1 -f adts pipe:1"), radio)
+output.icecast(description="Experimental stream using Liquidsoap", genre="Freeform", name="Music Too", host="127.0.0.1", port=8000, mount="audio.aac", public=true, url="http://warblefly.sytes.net:8000/audio.aac", timeout=240.0, format="audio/aac", password="REDACTED", %external(samplerate=32000, channels=2, process="ffmpeg -f s16le -ar 32000 -ac 2 -i pipe:0 -acodec libfdk_aac -vbr 1 -profile:a aac_he_v2 -vn -af dynaudnorm=g=7:m=70:r=1.0:c=1:b=1,asetnsamples=2048,volume=-18dB,mcompand='0.005\,0.1 6 -47/-40\,-34/-34\,-17/-33 100 | 0.003\,0.05 6 -47/-40\,-34/-34\,-17/-33 400 | 0.000625\,0.0125 6 -47/-40\,-34/-34\,-15/-33 1600 | 0.0001\,0.025 6 -47/-40\,-34/-34\,-31/-31\,-0/-30 6400 | 0\,0.025 6 -38/-31\,-28/-28\,-0/-25 15999',volume=+20dB,alimiter=limit=-4dB:asc=1,dynaudnorm=r=1.0:p=0.99:b=1:c=1 -f adts pipe:1"), radio)
 
 
-output.icecast(description="Experimental stream using Liquidsoap (hifi)", genre="Freeform", name="Music Too", host="127.0.0.1", port=8000, mount="audio-hifi.aac", public=true,  url="http://warblefly.sytes.net:8000/audio-hifi.aac", timeout=240.0, format="audio/aac", password="T6h£mPOOsx", %external(samplerate=32000, channels=2, process="ffmpeg -f s16le -ar 32000 -ac 2 -i pipe:0 -acodec libfdk_aac -vbr 5 -vn -af dynaudnorm=g=7:m=70:r=1.0 -f adts pipe:1"), radio)
+output.icecast(description="Experimental stream using Liquidsoap (hifi)", genre="Freeform", name="Music Too", host="127.0.0.1", port=8000, mount="audio-hifi.aac", public=true,  url="http://warblefly.sytes.net:8000/audio-hifi.aac", timeout=240.0, format="audio/aac", password="REDACTED", %external(samplerate=32000, channels=2, process="ffmpeg -f s16le -ar 32000 -ac 2 -i pipe:0 -acodec libfdk_aac -vbr 5 -vn -af dynaudnorm=g=7:m=70:r=1.0 -f adts pipe:1"), radio)
 
-output.icecast(description="Experimental stream using Liquidsoap (hifi-lowbw)", genre="Freeform", name="Music Too", host="127.0.0.1", port=8000, mount="audio-hifi-low.aac", public=true, url="http://warblefly.sytes.net:8000/audio-hifi-low.aac", timeout=240.0, format="audio/aac", password="T6h£mPOOsx", %external(samplerate=32000, channels=2, process="ffmpeg -f s16le -ar 32000 -ac 2 -i pipe:0 -acodec libfdk_aac -vbr 1 -profile:a aac_he_v2 -vn -af dynaudnorm=g=7:m=70:r=1.0 -f adts pipe:1"), radio)
+output.icecast(description="Experimental stream using Liquidsoap (hifi-lowbw)", genre="Freeform", name="Music Too", host="127.0.0.1", port=8000, mount="audio-hifi-low.aac", public=true, url="http://warblefly.sytes.net:8000/audio-hifi-low.aac", timeout=240.0, format="audio/aac", password="REDACTED", %external(samplerate=32000, channels=2, process="ffmpeg -f s16le -ar 32000 -ac 2 -i pipe:0 -acodec libfdk_aac -vbr 1 -profile:a aac_he_v2 -vn -af dynaudnorm=g=7:m=70:r=1.0 -f adts pipe:1"), radio)
 
