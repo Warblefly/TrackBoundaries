@@ -19,10 +19,15 @@ def analyse(filename, volDrop=10, volStart=40, mezzanine=None, forceEncode=False
     print("Processing filename: %s" % filename)
     # If we're being asked to create a mezzanine file, we need to make a unique suffix for this file
     # but the suffix MUST be related to the file's contents, to be able to identify the file
-    # so that we do not waste time encoding it twice.
+    # so that we do not waste time encoding it twice. FFmpeg provides a hash function for this.
+    # Incidentally, this might be a way of detecting duplicate tracks, too.
     if mezzanine:
-        randomString = ''.join(random.choice(string.ascii_letters) for i in range(6))
-        baseName = os.path.splitext(os.path.basename(filename))[0] + "." + randomString + ".mka"
+        hashout = str(subprocess.check_output([FFMPEG, "-v", "quiet", "-hide_banner", "-i", filename, "-vn", \
+                "-map", "0:a", "-f", "hash", "-hash", "MD5", "-"], stderr=subprocess.STDOUT))[6:-3]
+
+        print("MD5 hash is: %s" % hashout)
+        #randomString = ''.join(random.choice(string.ascii_letters) for i in range(6))
+        baseName = os.path.splitext(os.path.basename(filename))[0] + "." + hashout + ".mka"
         mezzanineName = os.path.join(mezzanine, baseName)
         print("Mezzanine name is: %s" % mezzanineName)
     else:
@@ -110,7 +115,7 @@ def analyse(filename, volDrop=10, volStart=40, mezzanine=None, forceEncode=False
         # the position of other elements in the file would change.
         temporaryFile = tempfile.NamedTemporaryFile(delete=False).name + ".mka"
         test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-i", mezzanineName, "-codec", "copy", \
-                "-metadata:s:a:0", "start_next="+'{:.3f}'.format(duration-nextTime), \
+                "-metadata:s:a:0", "cross_duration="+'{:.3f}'.format(duration-nextTime), \
                 "-metadata:s:a:0", "cue_point="+'{:.3f}'.format(cueTime), \
                 "-metadata:s:a:0", "loudness="+'{:.3f}'.format(loudness), temporaryFile], \
                 stderr=subprocess.STDOUT)).split('\\n')
@@ -179,7 +184,7 @@ with open(outfile, mode="w") as out:
             item = result["mezzanine_name"] + '\n'
 
         assembly = 'annotate:' + 'liq_cue_in="' + '{:.3f}'.format(cuePoint) \
-                + '",' + 'liq_start_next="' + '{:.3f}'.format(timeRemaining) \
+                + '",' + 'liq_cross_duration="' + '{:.3f}'.format(timeRemaining) \
                 + '",' + 'duration="' + '{:.3f}'.format(duration) \
                 + '",' + 'liq_amplify="' + '{:.3f}'.format(replayGain) + "dB" \
                 + '":' + item
