@@ -1,12 +1,14 @@
 #!/usr/bin/python3
 
-import subprocess, argparse, os, os.path, random, string, tempfile
+import subprocess, argparse, os, os.path, random, string, tempfile, csv
+from pathlib import Path
 
 FFMPEG = "/usr/local/bin/ffmpeg"
+FPCALC = "/usr/local/bin/fpcalc"
 #TESTFILE = "/mnt/6TB-OCT2018/3TB-BACKUP/MUSIC/Acid Jazz Grooves/CD1/08 - Lionel Moist Sextet - Chillin'.mp3"
 MEZZANINE = "-acodec libfdk_aac -vbr 5 -ac 2 -map 0:a"
 
-def analyse(filename, volDrop=10, volStart=40, mezzanine=None, forceEncode=False):
+def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
     # Analyses file in filename, returns seconds to end-of-file of place where volume last drops to level
     # below average loudness, given in volDrop in LU.
     # Also determines file start, where monentary loudness leaps above a certain point given by volStart
@@ -30,6 +32,23 @@ def analyse(filename, volDrop=10, volStart=40, mezzanine=None, forceEncode=False
         baseName = os.path.splitext(os.path.basename(filename))[0] + "." + hashout + ".mka"
         mezzanineName = os.path.join(mezzanine, baseName)
         print("Mezzanine name is: %s" % mezzanineName)
+        # Now we must detect if this file has already been converted
+        # What we're interested in comparing is the string between the penultimate '.'
+        # and the final '.'
+        # Create a list with any filenames matching the hash.
+        # If it contains an entry, the track has already been converted, and we
+        # need to abandon the process.
+        print("Looking for file containing hash.")
+        p = Path(mezzanine+'/')
+        findMe = mezzanine + '/' + '[FILENAME]' + hashout + '*.mka'
+        print("Path object is:", p)
+        print("Glob search is:", findMe)
+        pl = list(p.glob('*'+hashout+'*.mka'))
+        if len(pl) != 0: # There is already a file with this hash
+            print("This hash already exists! Not encoding.")
+            return(None)
+        print("No file found with that hash. Encoding.")
+
     else:
         mezzanineName = None
 
@@ -37,10 +56,9 @@ def analyse(filename, volDrop=10, volStart=40, mezzanine=None, forceEncode=False
 
     if mezzanine:
         test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-i", filename, "-vn", "-af", \
-                "ebur128", "-acodec", "libfdk_aac", "-vbr", "5", "-ac", "2", "-ar", "32000", \
-                "-map", "0:a", mezzanineName], stderr=subprocess.STDOUT)).split('\\n')
+                "ebur128", "-f", "null", "null"], stderr=subprocess.STDOUT)).split('\\n')
     else:
-        test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-i", filename, "-vn", "-af", "ebur128", "-f", "null", "null"], \
+        test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-y", "-i", filename, "-vn", "-af", "ebur128", "-f", "null", "null"], \
                 stderr=subprocess.STDOUT)).split('\\n')
     measure = []
     #print(test[:-14])
@@ -102,21 +120,42 @@ def analyse(filename, volDrop=10, volStart=40, mezzanine=None, forceEncode=False
         if item[1] > nextLevel:
             nextTime = item[0]
             break
-
     print("Starting next track at time: %f which is %f before end." % (nextTime, duration-nextTime))
+    # Little piece of logic to fix "Bohemian Rhapsody" and other songs with a long
+    # but important tail.
+
+    longTail = "False"
+
+    if (duration-nextTime) > 15.0:
+        longTail = "True"
+        print("This track has a LONG TAIL.")
+        print("Lowering next track trigger level by 3dB.")
+        nextLevel = loudness - volDrop - 15.0
+        print("We're looking for %f LUFS volume." % nextLevel)
+        # Set a sensible default if we can't find the right drop
+        nextTime = 0.0
+
+        for item in measure:
+            if item[1] > nextLevel:
+                nextTime = item[0]
+                break
+        print("Starting next track at NEW time: %f which is %f before end." % (nextTime, duration-nextTime))
 
     # At this point, the file of interest is EITHER the original file, OR a mezzanine name.
     # ONLY IF we've made a mezzanine name, we want to add some metadata to show our working.
     if mezzanine:
-        print("We're adding metadata to the mezzanine file.")
+        print("Creating mezzanine file with added metadata.")
 
         # Let's write the metadata, in case it's useful to somebody else
         # We need a temporary filename for FFmpeg to write to. We can't write metadata in place, because
         # the position of other elements in the file would change.
         temporaryFile = tempfile.NamedTemporaryFile(delete=False).name + ".mka"
-        test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-i", mezzanineName, "-codec", "copy", \
-                "-metadata:s:a:0", "cross_duration="+'{:.3f}'.format(duration-nextTime), \
-                "-metadata:s:a:0", "cue_point="+'{:.3f}'.format(cueTime), \
+        test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-i", filename, \
+                "-vn", "-acodec", "copy", \
+                "-metadata:s:a:0", "longtail="+longTail, \
+                "-metadata:s:a:0", "liq_cross_duration="+'{:.3f}'.format(duration-nextTime), \
+                "-metadata:s:a:0", "liq_cue_in="+'{:.3f}'.format(cueTime), \
+                "-metadata:s:a:0", "duration="+'{:.3f}'.format(duration), \
                 "-metadata:s:a:0", "loudness="+'{:.3f}'.format(loudness), temporaryFile], \
                 stderr=subprocess.STDOUT)).split('\\n')
         os.rename(temporaryFile, mezzanineName)
@@ -124,17 +163,22 @@ def analyse(filename, volDrop=10, volStart=40, mezzanine=None, forceEncode=False
         print("We are NOT adding metadata to any file.")
 
     return({"start_next": duration-nextTime, "cue_point": cueTime, "duration": duration, \
-            "loudness": loudness, "mezzanine_name": mezzanineName})
+            "loudness": loudness, "mezzanine_name": mezzanineName,
+            "longtail": longTail})
+
+def fingerprint(filename):
+    test = subprocess.check_output([FPCALC, "-algorithm", "4", "-overlap", "-length", "30", "-raw", "-plain", "-signed", filename], encoding='utf-8').rstrip('\n')
+    return(test)
+
 
 # What's the command?
 parser = argparse.ArgumentParser(description="Create start and end-of-track annotations for playlist.",
         epilog="For support, contact john@johnwarburton.net")
 parser.add_argument("playlist", help="Playlist file to be processed")
-parser.add_argument("-l", "--level",  help="LU below average loudness to trigger next track.", default=10, type=float)
+parser.add_argument("-l", "--level",  help="LU below average loudness to trigger next track.", default=8, type=float)
 parser.add_argument("-c", "--cue", help="LU below average loudness for track cue-in point", default=40, type=float)
 parser.add_argument("-o", "--output", help="Output filename (default: '-processed' suffix)", type=str)
-parser.add_argument("-m", "--mezzanine", help="Directory for mezzanine-format files (give this to convert)", \
-        type=str)
+parser.add_argument("-m", "--mezzanine", help="Directory for mezzanine-format files", type=str)
 args = parser.parse_args()
 
 playlist = args.playlist
@@ -152,10 +196,10 @@ if args.mezzanine:
     # Convert given path to an absolute path
     mezzanine = os.path.abspath(args.mezzanine)
     try:
-        os.makedirs(mezzanine)
+        os.makedirs(mezzanine, exist_ok=True)
         print("Created directory %s for output audio files." % mezzanine)
     except OSError:
-        print("Sorry, the directory %s already exists." % mezzanine)
+        print("Sorry, the directory %s is weird. Might be a file?" % mezzanine)
         exit(1)
 else:
     mezzanine = None
@@ -170,15 +214,23 @@ with open(playlist) as i:
 print("We have read %s items." % len(playlistLines))
 
 with open(outfile, mode="w") as out:
+    out.write("#EXTM3U\n")
 
     for item in playlistLines:
         result = analyse(filename=item.strip(), volDrop=level, volStart=cue, mezzanine=mezzanine, forceEncode=False)
+        # analyse() returns None if the audio has already been converted.
+        # At this point, we can skip writing a new line to the playlist, because the file is already
+        # extant, and must have been referenced already within the playlist we're creating.
+        if result==None:
+            continue
         timeRemaining = result["start_next"]
         cuePoint = result["cue_point"]
         duration = result["duration"]
-        # Here, we calculate replayGain by subtracting the actual loudness of the track from -14
-        # because -14LUFS is our internal standard for loudness
-        replayGain = (-14) - result["loudness"]
+        # Here, we calculate replayGain by subtracting the actual loudness of the track from -23
+        # because -23LUFS is our internal standard for loudness.
+        # It's this low because many tracks have peaks way above their loudness level, and these
+        # will distort if raised very far.
+        replayGain = (-23) - result["loudness"]
         if result["mezzanine_name"]:
             # Remember, a file read in lines has a newline on the end of every line
             item = result["mezzanine_name"] + '\n'
@@ -191,6 +243,14 @@ with open(outfile, mode="w") as out:
         print("Writing line:")
         print(assembly)
         out.write(assembly)
+        # Fingerprinting is now in a separate program
+        #fing = fingerprint(item.strip())
+        #fd = open('database.csv', 'a')
+        #csvWriter = csv.writer(fd)
+        #csvWriter.writerow([item.strip(), fing])
+        #fd.close()
+        #print("Fingerprint is:")
+        #print(fing)
 print("Done.")
 
 
