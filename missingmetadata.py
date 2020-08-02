@@ -68,7 +68,7 @@ def removeEndNumber(filename, limit=4):
 
 def removeFrontNumber(filename, limit=1):
     clean = filename.lstrip(string.digits)
-    print("DEBUG: clean is %s, filename is %s" % (clean, filename))
+#    print("DEBUG: clean is %s, filename is %s" % (clean, filename))
     if len(clean) <= len(filename)-limit:
         return clean
     else:
@@ -76,12 +76,12 @@ def removeFrontNumber(filename, limit=1):
 
 def removeEndPunctuation(filename):
     # We don't use string.punctuation because brackets are often part of a song title
-    return filename.rstrip("!\"#$%&*+.,-/:;<=>?@\^_`|~ ")
+    return filename.rstrip("\"#$%&*+.,-/:;<=>@\^_`|~ ")
 
 def removeFrontPunctuation(filename):
-    return filename.lstrip("!\"#$%&*+.,-/:;<=>?@\^_`|~ ")
+    return filename.lstrip("\"#$%&*+.,-/:;<=>@\^_`|~ ")
 
-def generateMetadata(filename):
+def sanitizeString(filename):
     # If there's a number at the end AND it has more than four digits, discard it and any punctuation preceding itself.
     # If there's a number at the front, discard it AND ANY PUNCTUATION THAT FOLLOWS IT
     # If there's still a number at the end and it has more th an four digits, discard it and any punctuation preceding itself.
@@ -99,8 +99,7 @@ def generateMetadata(filename):
     mod3 = removeEndNumber(mod2)
     # Remove any punctuation remaining here
     mod4 = removeEndPunctuation(mod3)
-
-    # Take a number off the front (e.g. a track number)
+     # Take a number off the front (e.g. a track number)
     mod5 = removeFrontNumber(mod4)
     # Remove punctuation after that
     mod6 = removeFrontPunctuation(mod5)
@@ -111,13 +110,20 @@ def generateMetadata(filename):
 
     # Replace any underscores with spaces
     mod9 = mod8.replace("_", " ")
+    return(mod9)
+
+def generateMetadata(filename):
+    sanitized = sanitizeString(filename)
 
     # Find the last hyphen and split the string at that point
-    unstrippedTitleList = mod9.rsplit("-", 1)
+    unstrippedTitleList = sanitized.rsplit("-", 1)
     titleList = [item.strip() for item in unstrippedTitleList]
     cappedTitleList = [string.capwords(item) for item in titleList]
-    if len(cappedTitleList) < 2:
-        cappedTitleList.append(None)
+    # Each word in the list might have numbers or unwanted punctuation. Remove this.
+    sanitizedCappedTitleList = [sanitizeString(item) for item in cappedTitleList]
+    if len(sanitizedCappedTitleList) < 2:
+        sanitizedCappedTitleList.append(None)
     # Usually, the artist is first, the title second
 
-    return(cappedTitleList[0], cappedTitleList[1])
+    return(sanitizedCappedTitleList[0], sanitizedCappedTitleList[1])
+
