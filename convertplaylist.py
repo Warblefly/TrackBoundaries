@@ -40,6 +40,9 @@ with open(outfile, mode="w", encoding='utf-8') as outfp:
         for line in fp:
             intrack = line.strip()
     #        print(intrack)
-            realtrack = convertfile(intrack, root)
-            outfp.write(realtrack + '\n')
+            if intrack != "#":
+                realtrack = convertfile(intrack, root)
+                outfp.write(realtrack + '\n')
+            else:
+                outfp.write("#EXTM3U\n")
 
