@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 ### Dedup.py
 ###
 ### (C) John Warburton 2020
@@ -31,18 +33,26 @@ print("Starting to make list of combinations...", file=sys.stderr)
 combos = list(itertools.combinations(range(0, DATALENGTH), 2))
 print("There are %s combinations to explore." % len(combos), file=sys.stderr)
 print("*** DATABASE", file=sys.stderr)
+
+
 def checkcombo(tracklistCombos):
     # print("Matching: ", tracklistCombos)
-    match = fuzz.ratio(DATA[tracklistCombos[0]], DATA[tracklistCombos[1]])
-    if (match >= 74):
+    match = fuzz.ratio(DATA[tracklistCombos[0]][1], DATA[tracklistCombos[1]][1])
+#    if (match >= 50):
+        #print("We're matching %s with %s." % (DATA[tracklistCombos[0]][1], DATA[tracklistCombos[1]][1]))
         #print("Closeness of %s is %s" % (tracklistCombos, match))
         #print("This represents:")
         #print(DATA[tracklistCombos[0]][0])
         #print("and")
         #print(DATA[tracklistCombos[1]][0])i
         #print("%s, %s, %s" % (match, DATA[tracklistCombos[0]][0], DATA[tracklistCombos[1]][0]))
-        print('%s, "%s", "%s"' % (match, DATA[tracklistCombos[0]][0].replace('"', '""'), DATA[tracklistCombos[1]][0].replace('"', '""')))
-
+#        print('%s, "%s", "%s"' % (match, DATA[tracklistCombos[0]][0].replace('"', '""'), DATA[tracklistCombos[1]][0].replace('"', '""')))
+    if (match >= 71):
+        # Check durations. Are the tracks within 10s of each other?
+        difference = abs(float(DATA[tracklistCombos[0]][2]) - float(DATA[tracklistCombos[1]][2])) 
+        print("Match found: difference is %s" % difference, file=sys.stderr)
+        if difference <= 10:
+            print('%s, "%s", "%s"' % (match, DATA[tracklistCombos[0]][0].replace('"', '""'), DATA[tracklistCombos[1]][0].replace('"', '""')))
         
 
 def pool_handler():
