@@ -5,7 +5,6 @@ from pathlib import Path
 
 FFMPEG = "/usr/local/bin/ffmpeg"
 FPCALC = "/usr/local/bin/fpcalc"
-#TESTFILE = "/mnt/6TB-OCT2018/3TB-BACKUP/MUSIC/Acid Jazz Grooves/CD1/08 - Lionel Moist Sextet - Chillin'.mp3"
 MEZZANINE = "-acodec libfdk_aac -vbr 5 -ac 2 -map 0:a"
 
 def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
@@ -102,6 +101,7 @@ def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
     # start of the track, even if its audio begins at 0.0s. So, we must subtract 400ms
     # from the given time, then use either that time, or 0.0s (if the result is negative)
     # as our track starting point.
+    # We then take it back by a further 0.2s for safety -- NOT YET
     cueTime = max(0, ebuCueTime-0.4)
 
     print("Starting next track from cue point: %f" % cueTime)
@@ -151,6 +151,7 @@ def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
         # the position of other elements in the file would change.
         temporaryFile = tempfile.NamedTemporaryFile(delete=False).name + ".mka"
         test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-i", filename, \
+                # "-vn", "-acodec", "libfdk_aac", "-vbr", "5", "-ar", "48000", "-ac", "2", \
                 "-vn", "-acodec", "copy", \
                 "-metadata:s:a:0", "longtail="+longTail, \
                 "-metadata:s:a:0", "liq_cross_duration="+'{:.3f}'.format(duration-nextTime), \
@@ -217,6 +218,9 @@ with open(outfile, mode="w") as out:
     out.write("#EXTM3U\n")
 
     for item in playlistLines:
+        # Skip the M3U indicator
+        if item == "#EXTM3U\n":
+            continue
         result = analyse(filename=item.strip(), volDrop=level, volStart=cue, mezzanine=mezzanine, forceEncode=False)
         # analyse() returns None if the audio has already been converted.
         # At this point, we can skip writing a new line to the playlist, because the file is already
