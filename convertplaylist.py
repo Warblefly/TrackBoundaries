@@ -34,15 +34,20 @@ print(args)
 infile = args.infile
 outfile = args.outfile
 root = args.root
+headerWritten = False
 
 with open(outfile, mode="w", encoding='utf-8') as outfp:
     with open(infile, encoding='utf-8-sig') as fp:
         for line in fp:
             intrack = line.strip()
     #        print(intrack)
-            if intrack != "#":
+            if intrack[0] != "#":
                 realtrack = convertfile(intrack, root)
                 outfp.write(realtrack + '\n')
             else:
-                outfp.write("#EXTM3U\n")
+                if headerWritten == False:
+                    outfp.write("#EXTM3U\n")
+                    headerWritten = True
+                else:
+                    pass
 
