@@ -41,13 +41,13 @@ def intToBitPairs(number):
 parser = argparse.ArgumentParser(description="Automatically fingerprint file(s) containing audio",
         epilog="For support, contact john@johnwarburton.net")
 parser.add_argument("files", help="Path of files; shell-style wildcards are accepted.", type=str)
-# parser.add_argument("-d", "--duration", help="Duration, in seconds, of audio in fingerprint. Default: 14", default=14, type=int)
+parser.add_argument("-d", "--duration", help="Duration, in seconds, of audio in fingerprint. Default: 20", default=20, type=int)
 parser.add_argument("-o", "--output", help="Output database. Always overwritten. Default: chromaprints.csv", default="chromaprints.csv", type=str)
 args = parser.parse_args()
 
 files = args.files
 database = args.output
-duration = 20 # args.duration
+duration = args.duration
 
 filenameList = patternToList(files)
 print("We will examine %s files." % len(filenameList))
