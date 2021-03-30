@@ -22,6 +22,14 @@ CPUCOUNT = cpu_count()
 # This is the filename of the .csv containing the chromaprints to compare
 FILENAME = 'chromaprints.csv'
 
+class csvTextBuilder(object):
+    def __init__(self):
+        self.csv_string = []
+
+    def write(self,row):
+        self.csv_string.append(row)
+
+
 with open(FILENAME) as csvfile:
     DATA = list(csv.reader(csvfile))
 
@@ -47,17 +55,30 @@ def checkcombo(tracklistCombos):
         #print(DATA[tracklistCombos[1]][0])i
         #print("%s, %s, %s" % (match, DATA[tracklistCombos[0]][0], DATA[tracklistCombos[1]][0]))
 #        print('%s, "%s", "%s"' % (match, DATA[tracklistCombos[0]][0].replace('"', '""'), DATA[tracklistCombos[1]][0].replace('"', '""')))
-    if (match >= 71):
+    if (match >= 70):
         # Check durations. Are the tracks within 10s of each other?
         difference = abs(float(DATA[tracklistCombos[0]][2]) - float(DATA[tracklistCombos[1]][2])) 
         print("Match found: difference is %s" % difference, file=sys.stderr)
         if difference <= 10:
-            print('%s, "%s", "%s"' % (match, DATA[tracklistCombos[0]][0].replace('"', '""'), DATA[tracklistCombos[1]][0].replace('"', '""')))
+            csvdata = [match, DATA[tracklistCombos[0]][0], DATA[tracklistCombos[1]][0]]
+            csvfile = csvTextBuilder()
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(csvdata)
+            csvString = csvfile.csv_string
+            return(''.join(csvString))
+
+#            return('%s, "%s", "%s"\n' % (match, DATA[tracklistCombos[0]][0].replace('"', '""'), DATA[tracklistCombos[1]][0].replace('"', '""')))
+        else:
+            return("")
+    else:
+        return("")
         
 
 def pool_handler():
     p = Pool(CPUCOUNT)
-    p.map(checkcombo, combos)
+    with open('output.csv', 'w') as f:
+        for result in p.imap(checkcombo, combos, 250):
+            f.write(result)
 
 
 if __name__ == '__main__':
