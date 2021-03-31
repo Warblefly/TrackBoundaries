@@ -13,14 +13,28 @@
 
 
 import itertools
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
 from multiprocessing import Pool
 from multiprocessing import cpu_count
+import argparse
 import csv, sys
 
 CPUCOUNT = cpu_count()
+
+parser = argparse.ArgumentParser(description='Detects possibly duplicate tracks by their audio fingerprints.')
+parser.add_argument('-i', '--input', default='chromaprints.csv', 
+        help='Specify input CSV file containing chromaprints to be compared. Default: %(default)s')
+parser.add_argument('-o', '--output', default='duplicates.csv',
+        help='Specify output CSV file containing possible duplicates. Default: %(default)s')
+parser.add_argument('-m', '--match', default=70, type=int,
+        help='Integer specifying match factor required for duplicate detection. Default: %(default)i')
+
+args = parser.parse_args()
+
 # This is the filename of the .csv containing the chromaprints to compare
-FILENAME = 'chromaprints.csv'
+FILENAME = args.input
+OUTPUT = args.output
+MATCH = args.match
 
 class csvTextBuilder(object):
     def __init__(self):
@@ -55,7 +69,7 @@ def checkcombo(tracklistCombos):
         #print(DATA[tracklistCombos[1]][0])i
         #print("%s, %s, %s" % (match, DATA[tracklistCombos[0]][0], DATA[tracklistCombos[1]][0]))
 #        print('%s, "%s", "%s"' % (match, DATA[tracklistCombos[0]][0].replace('"', '""'), DATA[tracklistCombos[1]][0].replace('"', '""')))
-    if (match >= 70):
+    if (match >= MATCH):
         # Check durations. Are the tracks within 10s of each other?
         difference = abs(float(DATA[tracklistCombos[0]][2]) - float(DATA[tracklistCombos[1]][2])) 
         print("Match found: difference is %s" % difference, file=sys.stderr)
@@ -76,7 +90,7 @@ def checkcombo(tracklistCombos):
 
 def pool_handler():
     p = Pool(CPUCOUNT)
-    with open('output.csv', 'w') as f:
+    with open(OUTPUT, 'w') as f:
         for result in p.imap(checkcombo, combos, 250):
             f.write(result)
 
