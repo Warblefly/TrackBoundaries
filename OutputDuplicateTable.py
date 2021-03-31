@@ -29,14 +29,14 @@ JAVASCRIPT = """
 document.querySelector('#dupes').addEventListener('click', (ev) => {
         const cellid = ev.target.className;
     if (cellid === undefined) {
-        console.log("undefined cell");
+//        console.log("undefined cell");
         return;
     }
-    console.log(cellid);
+//    console.log(cellid);
     var all = document.getElementsByClassName(cellid);
     for (var i = 0; i < all.length; i++) {
-        console.log(getComputedStyle(all[i]).getPropertyValue("background-color"));
-        if (getComputedStyle(all[i]).getPropertyValue('background-color') !== 'rgb(85, 255, 255)') {
+//        console.log(getComputedStyle(all[i]).getPropertyValue("background-color"));
+        if (getComputedStyle(all[i]).getPropertyValue('background-color') !== 'rgb(255, 160, 160)') {
             all[i].style.backgroundColor = '#FFA0A0';
         } 
         else {
