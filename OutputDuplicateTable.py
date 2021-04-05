@@ -26,6 +26,44 @@ border-collapse: collapse;
 
 JAVASCRIPT = """
 <script>
+// Changes background colour of selected item
+// and also those of all other identical items
+// because each item has a DOM id corresponding to
+// the hash of the audio file it refers to.
+
+var filesToRemove = [];
+
+// Use this to remove an element by value from an array
+
+function arrayRemove(arr, value) {
+    return arr.filter(function(ele) {
+        return ele != value;
+        });
+}
+
+// Makes sure only one audio element is playing at the same time
+function onlyPlayOneIn(container) {
+    container.addEventListener("play", function(event) {
+    audio_elements = container.getElementsByTagName("audio")
+        for(i=0; i < audio_elements.length; i++) {
+            audio_element = audio_elements[i];
+            if (audio_element !== event.target) {
+                audio_element.pause();
+            }
+        }
+    }, true);
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    onlyPlayOneIn(document.body);
+});
+    
+const removeDuplicates = (duplicates) => {
+    const unique = Array.from(new Set(duplicates));
+    return unique;
+}
+
+
 document.querySelector('#dupes').addEventListener('click', (ev) => {
         const cellid = ev.target.className;
     if (cellid === undefined) {
@@ -38,12 +76,49 @@ document.querySelector('#dupes').addEventListener('click', (ev) => {
 //        console.log(getComputedStyle(all[i]).getPropertyValue("background-color"));
         if (getComputedStyle(all[i]).getPropertyValue('background-color') !== 'rgb(255, 160, 160)') {
             all[i].style.backgroundColor = '#FFA0A0';
+            // Add the filename contained in the cell (it's the second <td> element)
+            // to the list of filenames to be deleted
+            // Obscure construction to get around selector starting with number
+            var fileToCut = document.querySelector("[class='" + cellid + "']").textContent.split("\\n", 1)[0];
+            filesToRemove.push(fileToCut);
+            console.log("Before dedup.");
+            console.log(filesToRemove);
+            // Make this an array with unique values
+            filesToRemove = removeDuplicates(filesToRemove);
+            document.getElementById("todelete").innerHTML = filesToRemove.join("\\n");
+            console.log("After dedup.");
+            console.log(filesToRemove);
         } 
         else {
             all[i].style.backgroundColor = 'white';
+            // This must be removed from the filesToRemove array.
+            // We assume that this array has only one item corresponding to the value
+            // we are removing.
+            var fileToCut = document.querySelector("[class='" + cellid + "']").textContent.split("\\n", 1)[0];
+            filesToRemove = arrayRemove(filesToRemove, fileToCut);
+            document.getElementById("todelete").innerHTML = filesToRemove.toString();
+            console.log(filesToRemove);            
        }
     }    
 });
+
+// Code to download the text contained within a text area
+const downloadToFile = (content, filename, contentType) => {
+    const a = document.createElement('a');
+    const file = new Blob([content], {type: contentType});
+    a.href = URL.createObjectURL(file);
+    a.download = filename;
+    a.click();
+    
+      URL.revokeObjectURL(a.href);
+};
+
+// Creates the action to download the text area, above
+document.querySelector('#savedelete').addEventListener('click', () => {
+    const textArea = document.querySelector('#todelete');
+    downloadToFile(textArea.value, 'delete-these-files.txt', 'text/plain');
+});
+
 </script>   
 
 
@@ -148,19 +223,21 @@ def createcelldata(row):
 
     html = (
         f"<tr><td>"
-        f"{float(match):.2f}</td>"
-        f"<td class=\"{item1['hash']}\">{item1['filename']}<br />"
-        f"{item1['artist']}<br />{item1['title']}<br />"
+        f"{float(match):.2f}</td>\n"
+        f"<td class=\"{item1['hash']}\">{item1['filename']}<br />\n"
+        f"{item1['artist']}<br />{item1['title']}<br />\n"
         f"{int(item1['bitrate']) / 1000:,.0f}kbit/s, {datetime.timedelta(seconds=round(float(item1['duration']),0))}, "
-        f"{int(item1['size']) / 1000:,.0f}k, {int(item1['samplerate']):,}Hz<br />"
-        f"{item1['codec']}"
-        f"</td>"
-        f"<td class=\"{item2['hash']}\">{item2['filename']}<br />"
-        f"{item2['artist']}<br />{item2['title']}<br />"
+        f"{int(item1['size']) / 1000:,.0f}k, {int(item1['samplerate']):,}Hz<br />\n"
+        f"{item1['codec']}<br />\n"
+        f"<audio controls style=\"width: 100%;\"><source src=\"{ROOT}/{item1['filename']}\"></audio>"
+        f"</td>\n"
+        f"<td class=\"{item2['hash']}\">{item2['filename']}<br />\n"
+        f"{item2['artist']}<br />{item2['title']}<br />\n"
         f"{int(item2['bitrate']) / 1000:,.0f}kbit/s, {datetime.timedelta(seconds=round(float(item2['duration']),0))}, "
-        f"{int(item2['size']) / 1000:,.0f}k, {int(item2['samplerate']):,}Hz<br />"
-        f"{item2['codec']}"
-        f"</td></tr>"
+        f"{int(item2['size']) / 1000:,.0f}k, {int(item2['samplerate']):,}Hz<br />\n"
+        f"{item2['codec']}<br />\n"
+        f"<audio controls style=\"width: 100%;\"><source src=\"{ROOT}/{item2['filename']}\"></audio>"
+        f"</td></tr>\n"
     )
 
     return html
@@ -194,7 +271,11 @@ with open(OUTPUT, 'w', encoding='utf-8') as op:
     for duplicaterow in fulltable:
         op.write(createcelldata(duplicaterow))
     op.write('</table>')
+    op.write('<a href="" id="dl" style="font-size: large;"></a>')
+    op.write('<textarea cols="160" rows="24" wrap="soft" placeholder="List of files to delete" id="todelete"></textarea>')
+    op.write('<button id="savedelete">SAVE</button>')
     op.write(JAVASCRIPT)
-    op.write('</body></html')
+
+    op.write('</body></html>')
 
 print(f'Table is now in {OUTPUT}')
