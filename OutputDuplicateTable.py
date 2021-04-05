@@ -81,13 +81,13 @@ document.querySelector('#dupes').addEventListener('click', (ev) => {
             // Obscure construction to get around selector starting with number
             var fileToCut = document.querySelector("[class='" + cellid + "']").textContent.split("\\n", 1)[0];
             filesToRemove.push(fileToCut);
-            console.log("Before dedup.");
-            console.log(filesToRemove);
+            // console.log("Before dedup.");
+            // console.log(filesToRemove);
             // Make this an array with unique values
             filesToRemove = removeDuplicates(filesToRemove);
             document.getElementById("todelete").innerHTML = filesToRemove.join("\\n");
-            console.log("After dedup.");
-            console.log(filesToRemove);
+            // console.log("After dedup.");
+            // console.log(filesToRemove);
         } 
         else {
             all[i].style.backgroundColor = 'white';
@@ -97,7 +97,7 @@ document.querySelector('#dupes').addEventListener('click', (ev) => {
             var fileToCut = document.querySelector("[class='" + cellid + "']").textContent.split("\\n", 1)[0];
             filesToRemove = arrayRemove(filesToRemove, fileToCut);
             document.getElementById("todelete").innerHTML = filesToRemove.toString();
-            console.log(filesToRemove);            
+            // console.log(filesToRemove);            
        }
     }    
 });
