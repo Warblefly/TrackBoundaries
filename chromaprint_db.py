@@ -41,7 +41,7 @@ def intToBitPairs(number):
 parser = argparse.ArgumentParser(description="Automatically fingerprint file(s) containing audio",
         epilog="For support, contact john@johnwarburton.net")
 parser.add_argument("files", help="Path of files; shell-style wildcards are accepted.", type=str)
-parser.add_argument("-d", "--duration", help="Duration, in seconds, of audio in fingerprint. Default: 20", default=20, type=int)
+parser.add_argument("-d", "--duration", help="Duration, in seconds, of audio in fingerprint. Default: 30", default=30, type=int)
 parser.add_argument("-o", "--output", help="Output database. Always overwritten. Default: chromaprints.csv", default="chromaprints.csv", type=str)
 args = parser.parse_args()
 
@@ -55,14 +55,18 @@ print("We will examine %s files." % len(filenameList))
 
 for filename in filenameList:
     checkFingerprint = fingerprint(filename, duration)
-    # Take only the first 1563 characters. The silence detection algorithm
+    # Take only the first 3059 characters. The silence detection algorithm
     # results in varying-length chromaprints
+    # The figure 3059 is arrived by experimentation with a real-world playlist
+    # and choosing a common length above which the vast majority of tracks
+    # fall.
     chromaprintList = list(map(int, checkFingerprint["chromaprint"].split(",")))
     dur = checkFingerprint["dur"]
     rawBinaryChromaprintList = [intToBitPairs(w) for w in chromaprintList]
     #for item in rawBinaryChromaprintList:
     #    print("len: %s" % len(item))
-    rawBinaryChromaprint = ','.join(rawBinaryChromaprintList)[:1563]
+#    rawBinaryChromaprint = ','.join(rawBinaryChromaprintList)[:1563]
+    rawBinaryChromaprint = ','.join(rawBinaryChromaprintList)[:3059]
     print("For file %s," % filename)
     print("...we have fingerprint:")
     print(rawBinaryChromaprint)
