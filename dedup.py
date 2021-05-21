@@ -70,10 +70,10 @@ def checkcombo(tracklistCombos):
         #print("%s, %s, %s" % (match, DATA[tracklistCombos[0]][0], DATA[tracklistCombos[1]][0]))
 #        print('%s, "%s", "%s"' % (match, DATA[tracklistCombos[0]][0].replace('"', '""'), DATA[tracklistCombos[1]][0].replace('"', '""')))
     if (match >= MATCH):
-        # Check durations. Are the tracks within 10s of each other?
+        # Check durations. Are the tracks within 120s of each other?
         difference = abs(float(DATA[tracklistCombos[0]][2]) - float(DATA[tracklistCombos[1]][2])) 
         print("Match found: difference is %s" % difference, file=sys.stderr)
-        if difference <= 10:
+        if difference <= 120:
             csvdata = [match, DATA[tracklistCombos[0]][0], DATA[tracklistCombos[1]][0]]
             csvfile = csvTextBuilder()
             csvwriter = csv.writer(csvfile)
