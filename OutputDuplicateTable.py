@@ -229,14 +229,14 @@ def createcelldata(row):
         f"{int(item1['bitrate']) / 1000:,.0f}kbit/s, {datetime.timedelta(seconds=round(float(item1['duration']),0))}, "
         f"{int(item1['size']) / 1000:,.0f}k, {int(item1['samplerate']):,}Hz<br />\n"
         f"{item1['codec']}<br />\n"
-        f"<audio controls style=\"width: 100%;\"><source src=\"{ROOT}/{item1['filename']}\"></audio>"
+        f"<audio controls preload=none style=\"width: 100%;\"><source src=\"{ROOT}/{item1['filename']}\"></audio>"
         f"</td>\n"
         f"<td class=\"{item2['hash']}\">{item2['filename']}<br />\n"
         f"{item2['artist']}<br />{item2['title']}<br />\n"
         f"{int(item2['bitrate']) / 1000:,.0f}kbit/s, {datetime.timedelta(seconds=round(float(item2['duration']),0))}, "
         f"{int(item2['size']) / 1000:,.0f}k, {int(item2['samplerate']):,}Hz<br />\n"
         f"{item2['codec']}<br />\n"
-        f"<audio controls style=\"width: 100%;\"><source src=\"{ROOT}/{item2['filename']}\"></audio>"
+        f"<audio controls preload=none style=\"width: 100%;\"><source src=\"{ROOT}/{item2['filename']}\"></audio>"
         f"</td></tr>\n"
     )
 
