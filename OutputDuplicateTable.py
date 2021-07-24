@@ -249,7 +249,7 @@ parser = argparse.ArgumentParser(description='Creates helpful web-page from list
 parser.add_argument('-o', '--output', default='duplicates_table.html',
                     help='Specify output file. Will be overwritten. Default: %(default)s')
 parser.add_argument('-r', '--root', default='', help='Add a root to files in the CSV duplicates list.')
-parser.add_argument('csvfile', default='output.csv', nargs='?',
+parser.add_argument('csvfile', default='duplicates.csv', nargs='?',
                     help='Specify CSV duplicates list. Default: %(default)s')
 
 args = parser.parse_args()
