@@ -22,7 +22,7 @@ import csv, sys
 CPUCOUNT = cpu_count()
 
 parser = argparse.ArgumentParser(description='Detects possibly duplicate tracks by their audio fingerprints.')
-parser.add_argument('-i', '--input', default='chromaprints.csv', 
+parser.add_argument('-i', '--input', default='chromaprints.csv',
         help='Specify input CSV file containing chromaprints to be compared. Default: %(default)s')
 parser.add_argument('-o', '--output', default='duplicates.csv',
         help='Specify output CSV file containing possible duplicates. Default: %(default)s')
@@ -71,7 +71,7 @@ def checkcombo(tracklistCombos):
 #        print('%s, "%s", "%s"' % (match, DATA[tracklistCombos[0]][0].replace('"', '""'), DATA[tracklistCombos[1]][0].replace('"', '""')))
     if (match >= MATCH):
         # Check durations. Are the tracks within 120s of each other?
-        difference = abs(float(DATA[tracklistCombos[0]][2]) - float(DATA[tracklistCombos[1]][2])) 
+        difference = abs(float(DATA[tracklistCombos[0]][2]) - float(DATA[tracklistCombos[1]][2]))
         print("Match found: difference is %s" % difference, file=sys.stderr)
         if difference <= 120:
             csvdata = [match, DATA[tracklistCombos[0]][0], DATA[tracklistCombos[1]][0]]
@@ -86,7 +86,7 @@ def checkcombo(tracklistCombos):
             return("")
     else:
         return("")
-        
+
 
 def pool_handler():
     p = Pool(CPUCOUNT)
@@ -108,6 +108,4 @@ if __name__ == '__main__':
 #        print(data[check[0]][0])
 #        print("and")
 #        print(data[check[1]][0])
-
-
 
