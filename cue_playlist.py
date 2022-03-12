@@ -163,7 +163,7 @@ def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
     else:
         print("We are NOT adding metadata to any file.")
 
-    return({"start_next": max(duration-nextTime), "cue_point": cueTime, "duration": duration, \
+    return({"start_next": max(duration-nextTime,0), "cue_point": cueTime, "duration": duration, \
             "loudness": loudness, "mezzanine_name": mezzanineName,
             "longtail": longTail})
 
