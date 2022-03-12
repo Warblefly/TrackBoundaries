@@ -129,7 +129,7 @@ def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
     if (duration-nextTime) > 15.0:
         longTail = "True"
         print("This track has a LONG TAIL.")
-        print("Lowering next track trigger level by 3dB.")
+        print("Lowering next track trigger level by 15dB.")
         nextLevel = loudness - volDrop - 15.0
         print("We're looking for %f LUFS volume." % nextLevel)
         # Set a sensible default if we can't find the right drop
@@ -154,7 +154,7 @@ def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
                 # "-vn", "-acodec", "libfdk_aac", "-vbr", "5", "-ar", "48000", "-ac", "2", \
                 "-vn", "-acodec", "copy", \
                 "-metadata:s:a:0", "longtail="+longTail, \
-                "-metadata:s:a:0", "liq_cross_duration="+'{:.3f}'.format(duration-nextTime), \
+                "-metadata:s:a:0", "liq_cross_duration="+'{:.3f}'.format(max(duration-nextTime,0)), \
                 "-metadata:s:a:0", "liq_cue_in="+'{:.3f}'.format(cueTime), \
                 "-metadata:s:a:0", "duration="+'{:.3f}'.format(duration), \
                 "-metadata:s:a:0", "loudness="+'{:.3f}'.format(loudness), temporaryFile], \
@@ -163,7 +163,7 @@ def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
     else:
         print("We are NOT adding metadata to any file.")
 
-    return({"start_next": duration-nextTime, "cue_point": cueTime, "duration": duration, \
+    return({"start_next": max(duration-nextTime), "cue_point": cueTime, "duration": duration, \
             "loudness": loudness, "mezzanine_name": mezzanineName,
             "longtail": longTail})
 
