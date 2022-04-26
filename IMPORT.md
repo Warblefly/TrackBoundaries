@@ -9,11 +9,11 @@ This is how to import a playlist.
 5. If combining this new playlist with other playlists:\
 `combineplaylists.py -i <PLAYLIST1> -i <PLAYLIST2> ... -o <OUTPUT>`
 6. Move into the mezzanine directory containing the newly-wrapped music files
-7. Ensure there are no .csv files, or any other non-music files.
+7. Ensure there are no .csv files, or any other non-music files. (Also, temporarily, files < 30s crash the system.)
 8. Create chromaprints of every music file present.\
 `chromaprint_db.py "*"`
 10. The output file will be called 'chromaprints.csv'
-11. Move this to wherever you want to process it. I use another, large multi-processor machine.
+11. Move this to wherever you want to process it. I use another, large multi-processor machine running WSL2
 12. Execute the de-duplication table generator:\
 `dedup.py`
 14. On its output, duplicates.csv, execute the HTML/Javascript media player generator, remembering that the PATH_TO_MUSIC_DIRECTORY must be where your web browser can find the music files:\
