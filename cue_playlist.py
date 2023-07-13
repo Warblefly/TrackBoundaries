@@ -61,19 +61,20 @@ def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
                 stderr=subprocess.STDOUT)).split('\\n')
     measure = []
     #print(test[:-14])
-    for item in test[:-14]:
+    for item in test[:-12]:
         if  item.startswith("[Parsed_ebur128"):
-            #print(item, item[-86:-74], item[-53:-47])
-            measure.append([float(item[-86:-74].strip()), float(item[-53:-47].strip())])
+            if item.find("Summary") == -1:
+#                print(item, item[-86:-74], item[-53:-47])
+                measure.append([float(item[-86:-74].strip()), float(item[-53:-47].strip())])
 
     # measure now contains a list of lists-of-floats: each item is [time],[loudness]
-
+#   print("Testing THIS line for loudness: %s" % test[-9])
     loudness = float(test[-9].split()[1])
 
     # Get duration. It's the second item in the -13th line returned from
     # the FFmpeg process, in the list of lines named 'test'
-    print("Stats line is %s" % test[-14])
-    partiallyParsedDuration = test[-14].split("=")[2].split()[0]
+    print("Stats line is %s" % test[-13])
+    partiallyParsedDuration = test[-13].split("=")[2].split()[0]
     print("Duration line is %s" % partiallyParsedDuration)
     hmsSplit = partiallyParsedDuration.split(":")
     duration = float(int(hmsSplit[0])*3600 + int(hmsSplit[1])*60 + float(hmsSplit[2]))
