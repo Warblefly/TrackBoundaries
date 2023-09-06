@@ -26,6 +26,7 @@ def filenamesfromm3u8(playlist: str):
                 filenames.append(line.strip())
             else:
                 filenames.append(line[lastcolon + 1:].strip())
+    #print("Filenames are %s" % filenames)
     return filenames
 
 def findhash(inputfilename: str):
@@ -36,7 +37,7 @@ def findhash(inputfilename: str):
 def playlistedfilesmissingfromdirectory(playlist, directory):
     # Need to build a list of files expected from a playlist
     files = filenamesfromm3u8(playlist)
-    # print(files)
+    #print(files)
     errors = []
     for item in files:
         if not os.path.isfile(item):
@@ -69,6 +70,7 @@ def weedplaylist(playlist: str, filelist: list):
     removedlist = []
     with open(playlist, 'r', encoding='utf-8') as pl:
         for line in pl:
+            # print("Checking playlist" % pl)
             workingentry = ['', '']
             # We do a try / except because the first line is an "#EXTM3U"
             try:
@@ -78,6 +80,7 @@ def weedplaylist(playlist: str, filelist: list):
             except:
                 continue
             workingdictionary[findhash(workingentry[1])] = workingentry
+            # print("workingdictionary is" % workingdictionary)
     #print(workingdirectory)
     # Now to step through the list of files.
     # It doesn't matter if these are full pathnames or just filenames
