@@ -1,11 +1,12 @@
 #!/usr/bin/python3
 
-import subprocess, argparse, os, os.path, random, string, tempfile, csv
+import subprocess, argparse, os, os.path, random, string, tempfile, csv, re
 from pathlib import Path
 
 FFMPEG = "/usr/local/bin/ffmpeg"
 FPCALC = "/usr/local/bin/fpcalc"
 MEZZANINE = "-acodec libfdk_aac -vbr 5 -ac 2 -map 0:a"
+MD5HashRE = re.compile(r'(?i)(?<![a-z0-9])[a-f0-9]{32}(?![a-z0-9])')
 
 def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
     # Analyses file in filename, returns seconds to end-of-file of place where volume last drops to level
@@ -28,9 +29,29 @@ def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
 
         print("MD5 hash is: %s" % hashout)
         #randomString = ''.join(random.choice(string.ascii_letters) for i in range(6))
-        baseName = os.path.splitext(os.path.basename(filename))[0] + "." + hashout + ".mka"
+
+        # But! If this filename already contains a hash, we need to remove it before adding this one.
+        # A hash exists in the between the second-to-last . and the last .
+        # and has 32 characters from 0-9,a-f
+
+        origBaseName = os.path.basename(filename)
+        searchCheck = re.search(MD5HashRE, origBaseName)
+        print("Debug: searchcheck = %s" % searchCheck)
+
+        if searchCheck:
+            # Remove the existing hash
+            # No action required if there isn't any hash in the first place
+            baseNameNoHash = origBaseName.replace('.' + searchCheck.group(0), '')
+            print("Debug: name without hash: %s" % baseNameNoHash)
+            origBaseName = baseNameNoHash
+
+
+        baseName = os.path.splitext(origBaseName)[0] + "." + hashout + ".mka"
+        print("Debug: name with replaced hash: %s" % baseName)
+
         mezzanineName = os.path.join(mezzanine, baseName)
         print("Mezzanine name is: %s" % mezzanineName)
+
         # Now we must detect if this file has already been converted
         # What we're interested in comparing is the string between the penultimate '.'
         # and the final '.'
@@ -52,36 +73,56 @@ def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
         mezzanineName = None
 
     # We pass "-vn" because some music files have invalid images, which can't be processed by ffmpeg
-
+#   Get working on this:  ffmpeg -v quiet -i mez3/Rafe_Gomez_Icy.17d3cf4a75edd765b5981c5e8322a4dc.mka -vn -af ebur128=metadata=1,ametadata=mode=print:file=- -f null null
     if mezzanine:
-        test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-i", filename, "-vn", "-af", \
-                "ebur128", "-f", "null", "null"], stderr=subprocess.STDOUT)).split('\\n')
+        test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-v", "quiet", "-i", filename, "-vn", "-af", \
+                                            "ebur128=metadata=1,ametadata=mode=print:file=-", "-f", "null", "null"], encoding='utf-8')).splitlines()
     else:
-        test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-y", "-i", filename, "-vn", "-af", "ebur128", "-f", "null", "null"], \
-                stderr=subprocess.STDOUT)).split('\\n')
+        test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-y", "-v", "quiet", "-i", filename, "-vn", "-af", \
+                                            "ebur128=metadata=1,ametadata=mode=print:file=-", "-f", "null", "null"], encoding='utf-8')).splitlines()
+
+    # Let's divide the measurements into frames. Each frame consists of SEVEN lines
+    framesLength = len(test)
+    #print(framesLength)
+    #print(test)
+
+    if framesLength % 7 != 0:
+        print("Oops. EBU R.128 frames output has extra/missing lines.")
+        exit(-1)
+
+    framesList = []
+
+    for index in range(framesLength // 7):
+        framesList.append([])
+        for increment in range(6):
+            framesList[index].append(test[(index*7) + increment])
+    # We now have a list of lists. Every lower-level list is a frame. The main list is frame-by-frame.
+
+    # print(framesList)
+
     measure = []
-    #print(test[:-14])
-    for item in test[:-12]:
-        if  item.startswith("[Parsed_ebur128"):
-            if item.find("Summary") == -1:
-#                print(item, item[-86:-74], item[-53:-47])
-                measure.append([float(item[-86:-74].strip()), float(item[-53:-47].strip())])
+
+    # We need a list of times and momentary loudnesses.
+    # We also need the overall integrated loudness.
+    # We also need the proper duration of this file.
+
+    for frame in framesList:
+        frameTime = frame[0].split(":")[-1]
+        frameLoudness = [i for i in frame if i.startswith('lavfi.r128.M=')][0].split("=")[-1]
+        measure.append([float(frameTime), float(frameLoudness)])
+
+    #    print(measure)
 
     # measure now contains a list of lists-of-floats: each item is [time],[loudness]
-#   print("Testing THIS line for loudness: %s" % test[-9])
-    loudness = float(test[-9].split()[1])
+    # Now we need overall loudness. This is the lavfi.r128.I value in the very last line
 
-    # Get duration. It's the second item in the -13th line returned from
-    # the FFmpeg process, in the list of lines named 'test'
-    print("Stats line is %s" % test[-13])
-    partiallyParsedDuration = test[-13].split("=")[2].split()[0]
-    print("Duration line is %s" % partiallyParsedDuration)
-    hmsSplit = partiallyParsedDuration.split(":")
-    duration = float(int(hmsSplit[0])*3600 + int(hmsSplit[1])*60 + float(hmsSplit[2]))
+    loudness = float([i for i in framesList[-1] if i.startswith('lavfi.r128.I=')][0].split("=")[-1])
+
+    # Get duration. It's the frame pts given in the last frame.
+
+    duration = float(framesList[-1][0].split(":")[-1])
+
     print("Duration is %f" % duration)
-#    duration = float(measure[-1][0])
-#    for item in measure:
-#        print("time: %f, loudness: %f" % (item[0], item[1]))
 
     print("Overall loudness is: %f" % loudness)
 
@@ -156,6 +197,7 @@ def analyse(filename, volDrop, volStart=40, mezzanine=None, forceEncode=False):
                 "-vn", "-acodec", "copy", \
                 "-metadata:s:a:0", "longtail="+longTail, \
                 "-metadata:s:a:0", "liq_cross_duration="+'{:.3f}'.format(max(duration-nextTime,0)), \
+                "-metadata:s:a:0", "liq_fade_out_delay="+'{:.3f}'.format(max(duration-nextTime,0)), \
                 "-metadata:s:a:0", "liq_cue_in="+'{:.3f}'.format(cueTime), \
                 "-metadata:s:a:0", "duration="+'{:.3f}'.format(duration), \
                 "-metadata:s:a:0", "loudness="+'{:.3f}'.format(loudness), temporaryFile], \
@@ -231,6 +273,9 @@ with open(outfile, mode="w") as out:
         timeRemaining = result["start_next"]
         cuePoint = result["cue_point"]
         duration = result["duration"]
+        # liq_fade_out_delay was introduced in liquidsoap 2.2.4 to indiate where any volume
+        # fade, as opposed to crossfade (my default: full overlap), should begin.
+        liq_fade_out_delay = timeRemaining
         # Here, we calculate replayGain by subtracting the actual loudness of the track from -23
         # because -23LUFS is our internal standard for loudness.
         # It's this low because many tracks have peaks way above their loudness level, and these
@@ -242,6 +287,7 @@ with open(outfile, mode="w") as out:
 
         assembly = 'annotate:' + 'liq_cue_in="' + '{:.3f}'.format(cuePoint) \
                 + '",' + 'liq_cross_duration="' + '{:.3f}'.format(timeRemaining) \
+                + '",' + 'liq_fade_out_delay="' + '{:.3f}'.format(liq_fade_out_delay) \
                 + '",' + 'duration="' + '{:.3f}'.format(duration) \
                 + '",' + 'liq_amplify="' + '{:.3f}'.format(replayGain) + "dB" \
                 + '":' + item
