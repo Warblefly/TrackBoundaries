@@ -108,4 +108,3 @@ if __name__ == '__main__':
 #        print(data[check[0]][0])
 #        print("and")
 #        print(data[check[1]][0])
-
