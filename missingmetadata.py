@@ -1,275 +1,461 @@
-#!/usr/bin/python3
-
+#!/usr/bin/env python3
 import os
 import argparse
-import xml.etree.ElementTree as ET
+import json
 import subprocess
 import os.path
 import string
 import glob
 import tempfile
+import re
+from typing import Optional, Dict, Any, Tuple, List
 
-# The version number gets embedded as metadata in the field "missingmetadata"
-# so we know not to touch data created by later versions, in case someone
-# runs an old script.
-VERSION="0.2"
-FFMPEG="ffmpeg"
+# Version embedded in MISSINGMETADATAVERSION tag
+VERSION = "0.4"
+FFMPEG = "ffmpeg"
+FFPROBE = "ffprobe"
 
-def filePrefix(filename, containsHash=True):
-    # Hash is the hash that the "Music Too" playlist system creates
-    # to identify uniquely a file. We don't need to consider it when
-    # trying to determine the tags for a file.
-    splitPos = 1 if containsHash==False else 2
-    splitFront = filename.rsplit('.', splitPos)[0]
-    return os.path.basename(splitFront)
 
-def replaceMetadata(filename=None, artist="", title=""):
+# Punctuation set (brackets intentionally excluded)
+_END_PUNCT = "\"#$%&*+.,-/:;<=>@\\^_`|~ "
 
+# MD5-like 32 hex tokens
+_MD5_HEX_RE = re.compile(r'(?i)\b[0-9a-f]{32}\b')
+_MD5_SEP_HEX_RE = re.compile(r'(?i)[\.\-_]\s*[0-9a-f]{32}\b')
+_MD5_SEP_HEX_END_RE = re.compile(r'(?i)[\.\-_]\s*[0-9a-f]{24,32}\s*$')
+
+# Any [ ... ] block
+_BRACKETED_ANY_RE = re.compile(r'\[[^\]]*\]')
+
+# Help to preserve MD5 hashes before removal
+_TRAILING_HEX_SEP_RE = re.compile(r'(?i)[\.\-_]\s*[0-9a-f]{24,32}\s*$')
+
+# ---------- Utilities ----------
+
+def parse_version_tuple(s: Optional[str]) -> Optional[Tuple[int, ...]]:
+    if not s:
+        return None
+    try:
+        parts = [int(p) for p in s.strip().split(".") if p.isdigit()]
+        return tuple(parts) if parts else None
+    except Exception:
+        return None
+
+def version_is_older(existing: Optional[str], current: str) -> bool:
+    """Return True if existing is None or a lower version than current."""
+    cur_t = parse_version_tuple(current)
+    old_t = parse_version_tuple(existing)
+    if cur_t is None:
+        return False
+    if old_t is None:
+        return True
+    max_len = max(len(old_t), len(cur_t))
+    old_t += (0,) * (max_len - len(old_t))
+    cur_t += (0,) * (max_len - len(cur_t))
+    return old_t < cur_t
+
+def run_cmd(cmd: List[str]) -> Tuple[int, str]:
+    try:
+        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        return 0, out.decode("utf-8", errors="replace")
+    except subprocess.CalledProcessError as e:
+        return e.returncode, e.output.decode("utf-8", errors="replace")
+
+def safe_temp_with_suffix(suffix: str) -> str:
+    tf = tempfile.NamedTemporaryFile(delete=False)
+    tf.close()
+    path = tf.name
+    if suffix:
+        new_path = path + suffix
+        os.replace(path, new_path)
+        return new_path
+    return path
+
+def remove_md5_hashes(s: str) -> str:
+    if s is None:
+        return ""
+    # Remove truncated tail form first (end of string)
+    s = _MD5_SEP_HEX_END_RE.sub('', s)
+    s = _MD5_SEP_HEX_RE.sub('', s)
+    s = _MD5_HEX_RE.sub('', s)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
+def remove_bracketed_catalog_numbers(s: str, min_digits: int = 8) -> str:
+    """
+    Remove square-bracketed catalogue numbers (≥8 digits, only digits/space/_/- inside).
+    Preserve text labels like [Live], [Remix].
+    """
+    if s is None:
+        return ""
+    def _repl(m: re.Match) -> str:
+        content = m.group(0)[1:-1]
+        digits = sum(c.isdigit() for c in content)
+        if digits >= min_digits and re.fullmatch(r'[\d\s\-_]+', content):
+            return ''   # drop the whole bracketed block
+        return m.group(0)  # keep non-numeric brackets
+    s = _BRACKETED_ANY_RE.sub(_repl, s)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+def _final_tidy(s: str) -> str:
+    if s is None:
+        return ""
+    s = s.strip()
+    s = s.rstrip(_END_PUNCT)
+    s = s.lstrip(_END_PUNCT)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+def clean_final(value: str) -> str:
+    """
+    Safe final cleaner: strip bracketed catalogue numbers and MD5 hashes,
+    tidy punctuation/whitespace. If result becomes empty, fallback to the
+    original with only hash removal. NEVER returns None.
+    """
+    orig = value or ""  # make sure we start with a string
+    s1 = remove_bracketed_catalog_numbers(orig)
+    s2 = remove_md5_hashes(s1)
+    s3 = _final_tidy(s2)
+    if s3 == "":
+        # Fallback prevents accidental full erase from aggressive removal
+        s3 = _final_tidy(remove_md5_hashes(orig))
+    return s3
+
+def _simple_norm(s: str) -> str:
+    """Lowercase, remove non-alphanumerics (except spaces), collapse whitespace."""
+    if not s:
+        return ""
+    return re.sub(r'[^a-z0-9]+', ' ', s.lower()).strip()
+
+def _token_set(s: str) -> set:
+    """Tokenize into a set of words."""
+    return set(_simple_norm(s).split())
+
+def filename_resembles_artist(filename_str: str, artist_str: str, threshold: float = 0.6) -> bool:
+    """
+    Return True if the filename string resembles the artist string,
+    based on token overlap ratio relative to artist tokens.
+
+    ratio = |tokens(filename) ∩ tokens(artist)| / |tokens(artist)|
+    """
+    fn_tokens = _token_set(filename_str)
+    artist_tokens = _token_set(artist_str)
+    if not fn_tokens or not artist_tokens:
+        return False
+    overlap = len(fn_tokens & artist_tokens)
+    ratio = overlap / max(1, len(artist_tokens))
+    return ratio >= threshold
+
+
+
+# ---------- Core logic ----------
+
+def filePrefix(filename: str, skip_hash: bool = False) -> str:
+    """
+    Return basename without extension; if skip_hash=True and the name contains
+    an extra dot-delimited hash before the extension, remove that trailing piece.
+    Example:
+      "Artist - Title.abcdef12.mp3" -> "Artist - Title" when skip_hash=True
+    """
+    base = os.path.basename(filename)
+    name, _ext = os.path.splitext(base)
+    if skip_hash and "." in name:
+        head, tail = name.rsplit(".", 1)
+        if re.fullmatch(r"[A-Za-z0-9]{6,32}", tail):
+            return head
+    return name
+
+def replaceMetadata(filename: str, artist: Optional[str] = "", title: Optional[str] = "") -> bool:
     artist = "" if artist is None else artist
-    title = "" if title is None else title
+    title  = "" if title is None else title
 
-    # Get a temporary filename for storing output
     fileExtension = os.path.splitext(filename)[1]
-    tempFile = tempfile.NamedTemporaryFile(delete=False).name + fileExtension
-    print("replaceMetadata has received filename %s, artist %s, title %s" % (filename, artist, title))
+    tempFile = safe_temp_with_suffix(fileExtension)
 
-    try:
-        output = subprocess.check_output([FFMPEG, '-i', filename, '-c', 'copy', '-metadata', 'title=' + title, \
-            '-metadata', 'artist=' + artist, '-metadata', 'MISSINGMETADATAVERSION=' + VERSION, '-vn', tempFile], stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError:
-        print("File %s caused FFmpeg error. Is it an audio file?" % filename)
+    # Keep all streams, copy only, set container metadata
+    cmd = [
+        FFMPEG,
+        "-hide_banner", "-loglevel", "error",
+        "-i", filename,
+        "-map", "0",
+        "-c", "copy",
+        "-metadata", f"title={title}",
+        "-metadata", f"artist={artist}",
+        "-metadata", f"MISSINGMETADATAVERSION={VERSION}",
+        "-y",
+        tempFile
+    ]
+
+    if fileExtension.lower() == ".mp3":
+        cmd = cmd[:-1] + ["-id3v2_version", "3"] + cmd[-1:]
+
+    rc, out = run_cmd(cmd)
+    if rc != 0:
+        print(f"FFmpeg failed for {filename}:\n{out}")
+        try:
+            if os.path.exists(tempFile):
+                os.remove(tempFile)
+        except Exception:
+            pass
         return False
 
-
-    print("Output was %s" % output.decode("utf-8"))
-    print("Incoming filename was %s", filename)
-    print("Temporary filename was %s", tempFile)
-
-    os.replace(tempFile, filename)
-
-def getMetadata(filename):
-    # Metadata for title and artist can appear in at least two places in the file.
-    # Returns False if there's nothing to use, returns a dictionary with data if there is.
-    # Some of it might be in the container,
-    # while some might be in the stream within the container.
-    # We should check both.
-    # First, get the tags.
-    title = None
-    artist = None
-    retrievedVersion = None
-    handler = None
     try:
-        output = subprocess.check_output(['ffprobe', '-loglevel', 'quiet', "-hide_banner", "-of", "xml", '-show_entries', \
-            'format_tags:stream_tags', filename], \
-            stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError:
-        print("File %s might not be an audio file." % filename)
+        os.replace(tempFile, filename)
+    except Exception as e:
+        print(f"Failed to replace original with temp for {filename}: {e}")
+        try:
+            if os.path.exists(tempFile):
+                os.remove(tempFile)
+        except Exception:
+            pass
         return False
 
-    # We'll dig down into 'output', which is XML, and locate the first instance of meaningful fields for
-    # 'artist' and 'title'
-    xml = ET.fromstring(output)
-    # Importantly, we look for the signature that this data has ALREADY been created by this program.
-    # If it has, AND it's by a later version, don't touch it
+    return True
 
+def _collect_tags_lower(ff_json: Dict[str, Any]) -> Dict[str, str]:
+    tags = {}
+    fmt = ff_json.get("format", {})
+    if "tags" in fmt and isinstance(fmt["tags"], dict):
+        for k, v in fmt["tags"].items():
+            tags[k.lower()] = v
 
-    # The first test tries to retrieve the version number of any previous instance of this
-    # script that has modified the file's metadata
-    try:
-        retrivedVersion = xml.find(".//tag[@key='MISSINGMETADATAVERSION']").attrib['value']
-    except AttributeError:
-        pass
+    for st in ff_json.get("streams", []):
+        if "tags" in st and isinstance(st["tags"], dict):
+            for k, v in st["tags"].items():
+                tags[k.lower()] = v
 
-    # We can't search in a case-insensitive way, so we have to do this the hard way.
-    try:
-        artist = xml.find(".//tag[@key='ARTIST']").attrib['value']
-    except AttributeError:
-        pass
-    try:
-        artist = xml.find(".//tag[@key='Artist']").attrib['value']
-    except AttributeError:
-        pass
-    try:
-        artist = xml.find(".//tag[@key='artist']").attrib['value']
-    except AttributeError:
-        pass
+    return tags
 
-    try:
-        title = xml.find(".//tag[@key='TITLE']").attrib['value']
-    except AttributeError:
-        pass
-    try:
-        title = xml.find(".//tag[@key='Title']").attrib['value']
-    except AttributeError:
-        pass
-    try:
-        title = xml.find(".//tag[@key='title']").attrib['value']
-    except AttributeError:
-        pass
+def getMetadata(filename: str) -> Optional[Dict[str, Optional[str]]]:
+    cmd = [
+        FFPROBE,
+        "-v", "quiet",
+        "-print_format", "json",
+        "-show_format",
+        "-show_streams",
+        filename
+    ]
+    rc, out = run_cmd(cmd)
+    if rc != 0:
+        print(f"File {filename} might not be a media file (ffprobe error).")
+        return None
 
     try:
-        handler = xml.find(".//tag[@key='HANDLER_NAME']").attrib['value']
-    except AttributeError:
-        pass
+        info = json.loads(out)
+    except json.JSONDecodeError:
+        print(f"ffprobe did not return valid JSON for {filename}")
+        return None
 
-    return{'artist': artist, 'title': title, 'version': retrievedVersion, 'handler': handler}
+    tags = _collect_tags_lower(info)
 
-def removeEndNumber(filename, limit=4):
+    def first_of(keys: List[str]) -> Optional[str]:
+        for k in keys:
+            v = tags.get(k)
+            if v:
+                return v
+        return None
+
+    artist = first_of(["artist", "album_artist", "author", "performer"])
+    title  = first_of(["title", "track", "name"])
+    version = first_of(["missingmetadataversion", "misingmetadataversion"])
+    handler = first_of(["handler_name", "handler", "encoder"])
+
+    return {"artist": artist, "title": title, "version": version, "handler": handler}
+
+# --- Sanitizers ---
+
+_YT_SUFFIX_RE = re.compile(r"""
+    (.*?)                # main part
+    \s*-\s*              # dash separator
+    ([A-Za-z0-9_-]{6,15})# YouTube-like id (no spaces)
+    \s*$                 # end
+""", re.VERBOSE)
+
+def removeYouTubeSuffix(filename: str, handler: Optional[str] = None) -> str:
+    if not handler:
+        return filename
+    if ("Google" in handler) or ("SoundHandler" in handler) or ("YouTube" in handler):
+        m = _YT_SUFFIX_RE.match(filename)
+        if m:
+            return m.group(1)
+    return filename
+
+def removeEndNumber(filename: str, limit: int = 4) -> str:
     clean = filename.rstrip(string.digits)
-    if len(clean) <= len(filename)-limit:
+    if len(clean) <= len(filename) - limit:
         return clean
     else:
         return filename
 
-def removeFrontNumber(filename, limit=1):
+def removeFrontNumber(filename: str, limit: int = 1) -> str:
     clean = filename.lstrip(string.digits)
-#    print("DEBUG: clean is %s, filename is %s" % (clean, filename))
-    if len(clean) <= len(filename)-limit:
+    if len(clean) <= len(filename) - limit:
         return clean
     else:
         return filename
 
-def removeYouTubeSuffix(filename, handler=None):
-    # Is this a YouTube file (indicated by 'handler')
-    # AND is there a sequence of between 6 and 12 alphanumeric characters preceded by a
-    # '-', and NO SPACES from the hyphen to the end of the string?
-    if handler:
-        if ('Google' in handler) or ('SoundHandler' in handler):
-            print("This is a YouTube file: %s" % filename)
-            test = filename.rsplit("-", 1)
-            # If this is a list, we've found a hyphen
-            if type(test) is list:
-                print("Split to: %s" % str(test))
-                suffix = test[-1]
-                # There may be underscores in here. Don't want them.
-                suffix = suffix.replace('_', '')
-                if (suffix.isalnum() and (6 <= len(suffix) <= 15)):
-                    clean = test[0]
-                    print("We've changed it to %s" % clean)
-                    return clean
-                else:
-                    return filename
-            else:
-                return filename
-        else:
-            return filename
-    else:
-        return filename
+_END_PUNCT = "\"#$%&*+.,-/:;<=>@\\^_`|~ "  # brackets intentionally excluded
 
-def removeEndPunctuation(filename):
-    # We don't use string.punctuation because brackets are often part of a song title
-    return filename.rstrip("\"#$%&*+.,-/:;<=>@\^_`|~ ")
+def removeEndPunctuation(filename: str) -> str:
+    return filename.rstrip(_END_PUNCT)
 
-def removeFrontPunctuation(filename):
-    return filename.lstrip("\"#$%&*+.,-/:;<=>@\^_`|~ ")
+def removeFrontPunctuation(filename: str) -> str:
+    return filename.lstrip(_END_PUNCT)
 
-def sanitizeString(filename, handler=None):
-    # If there's a number at the end AND it has more than four digits, discard it and any punctuation preceding itself.
-    # If there's a number at the front, discard it AND ANY PUNCTUATION THAT FOLLOWS IT
-    # If there's still a number at the end and it has more th an four digits, discard it and any punctuation preceding itself.
-    # If there's still a number at the front, discard it and any following punctuationself.
-    # Replace all "_" with " "
-    # Look for the last "-". If there's a "-", split the string around the last one.
-    # Discard any whitespace around what's left.
-    # The first piece is the artist, the second is the title.
-    # NB There MUST be a way of doing this with an extended regular expression!!
-    # It would be way more efficient.
+def normalize_dashes(s: str) -> str:
+    return s.replace("–", "-").replace("—", "-")
 
-    # Take a number off the end if it has more than 4 digits
-    mod1 = removeEndNumber(filename)
-    # Remove any puncutation before that
-    mod2 = removeEndPunctuation(mod1)
-    # Remove any large number still remaining in case there was a hyphen in the middle of a catalogue number
-    mod3 = removeEndNumber(mod2)
-    # Remove any punctuation remaining here
-    mod4 = removeEndPunctuation(mod3)
-    # Remove YouTube suffix
-    #print("Calling removeYouTubeSuffix with %s, %s" % (mod4, handler))
-    mod4a = removeYouTubeSuffix(mod4, handler)
-    #print(mod4a)
-    # Take a number off the front (e.g. a track number)
-    mod5 = removeFrontNumber(mod4a)
-    # Remove punctuation after that
-    mod6 = removeFrontPunctuation(mod5)
-    # Remove any remaining number after that
-    mod7 = removeFrontNumber(mod6)
-    # Remove any remaining punctuation
-    mod8 = removeFrontPunctuation(mod7)
+def sanitizeString(filename: str, handler: Optional[str] = None) -> str:
+    s = filename
+    s = removeYouTubeSuffix(s, handler)
+    
+    # Remove trailing ./_/- followed by 24–32 hex chars BEFORE stripping numbers
+    # This catches full MD5 (32) and fragments (e.g. 28) resulting from later number-strip
+    s = _TRAILING_HEX_SEP_RE.sub('', s)
 
-    # Replace any underscores with spaces
-    mod9 = mod8.replace("_", " ")
-    return mod9
+    s = removeEndNumber(s)
+    s = removeEndPunctuation(s)
+    s = removeEndNumber(s)
+    s = removeEndPunctuation(s)
 
-def generateMetadata(filename, handler=None):
+    s = removeFrontNumber(s)
+    s = removeFrontPunctuation(s)
+    s = removeFrontNumber(s)
+    s = removeFrontPunctuation(s)
+
+    s = s.replace("_", " ")
+    s = normalize_dashes(s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def generateMetadata(filename: str, handler: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
     sanitized = sanitizeString(filename, handler)
+    parts = [p.strip() for p in sanitized.rsplit("-", 1)]
+    parts = [string.capwords(p) for p in parts]
+    parts = [sanitizeString(p) for p in parts]
+    if len(parts) < 2:
+        parts.append(None)
+    artist, title = parts[0], parts[1]
+    return artist, title
 
-    # Find the last hyphen and split the string at that point
-    unstrippedTitleList = sanitized.rsplit("-", 1)
-    titleList = [item.strip() for item in unstrippedTitleList]
-    cappedTitleList = [string.capwords(item) for item in titleList]
-    # Each word in the list might have numbers or unwanted punctuation. Remove this.
-    sanitizedCappedTitleList = [sanitizeString(item) for item in cappedTitleList]
-    if len(sanitizedCappedTitleList) < 2:
-        sanitizedCappedTitleList.append(None)
-    # Usually, the artist is first, the title second
+def makeFilenameList(patterns: List[str]) -> List[str]:
+    results = []
+    for pat in patterns:
+        if os.path.exists(pat):
+            results.append(pat)
+        else:
+            results.extend(glob.glob(pat))
+    seen = set()
+    uniq = []
+    for p in results:
+        if p not in seen:
+            seen.add(p)
+            uniq.append(p)
+    return uniq
 
-    return(sanitizedCappedTitleList[0], sanitizedCappedTitleList[1])
+# ---------- CLI ----------
 
-def makeFilenameList(pattern):
-    return glob.glob(pattern)
-
-
-# The business.
-
-parser = argparse.ArgumentParser(description='Fill in missing metadata for media file, derived from filename.')
-parser.add_argument('pattern', nargs='*', help='Filename(s) to examine or modify. Shell wildcards accepted.')
-parser.add_argument('-m', action='store_true', help='Insert new metadata if none exists (default is to leave alone).')
-parser.add_argument('-f', action='store_true', help='Force replacement of metadata even if this should not normally be done.')
-parser.add_argument('-u', action='store_true', help='Disregard unique hash before file extension.')
-
+parser = argparse.ArgumentParser(description='Fill in missing metadata for media files, derived from filename.')
+parser.add_argument('pattern', nargs='*', help='Filename(s) or glob(s) to examine/modify.')
+parser.add_argument('-m', '--insert', action='store_true', help='Insert metadata if missing.')
+parser.add_argument('-f', '--force', action='store_true', help='Force replacement even if existing/newer.')
+parser.add_argument('-u', '--skip-hash', action='store_true', help='Disregard unique hash before extension.')
+parser.add_argument('-n', '--dry-run', action='store_true', help='Do not write changes; show what would be done.')
 args = parser.parse_args()
 
 PATTERN = args.pattern
-INSERT = args.m
-FORCE = args.f
-HASH = args.u
+INSERT = args.insert
+FORCE = args.force
+SKIP_HASH = args.skip_hash
+DRYRUN = args.dry_run
 
-skipHash = True if HASH == True else False
+files = makeFilenameList(PATTERN)
+filesTotal = len(files)
+print(f"Preparing to process {filesTotal} files...")
 
-#print("Pattern is %s, insert is %s, force is %s" % (PATTERN, INSERT, FORCE))
-
-filesTotal = len(PATTERN)
-print("Preparing to process %s files..." % filesTotal)
-
-count = 0
-
-for filename in PATTERN:
-    count += 1
-    print("Processing file %s of %s" % (count, filesTotal))
-    alreadyMetadata = getMetadata(filename)
-    if alreadyMetadata == False:
+for idx, filename in enumerate(files, 1):
+    print(f"\n[{idx}/{filesTotal}] {filename}")
+    meta = getMetadata(filename)
+    if not meta:
         continue
-    if ((alreadyMetadata['version'] == None) or (float(alreadyMetadata['version']) < VERSION)) or (FORCE == True):
-        #print("Processing: %s" % filename)
-        # What's the important part of the filename we need to inspect?
-        prefix = filePrefix(filename, skipHash)
-        # Do we have either a title or an artist?
-        if (alreadyMetadata['title'] != None) or (alreadyMetadata['artist'] != None):
-        #    print("No new metadata for %s" % filename)
-            continue
+
+    # Version guard (skip newer/equal unless forced)
+    newer_or_equal = meta.get('version') and not version_is_older(meta.get('version'), VERSION)
+    if newer_or_equal and not FORCE:
+        print(f"  - Skipping (metadata version present and not older): existing {meta.get('version')}, tool {VERSION}")
+        continue
+
+    need_artist = not meta.get('artist')
+    need_title  = not meta.get('title')
+
+    if not (need_artist or need_title) and not FORCE:
+        print("  - Metadata already present; not modifying.")
+        continue
+
+
+    prefix  = filePrefix(filename, skip_hash=SKIP_HASH)
+    handler = meta.get('handler')
+
+    # Initial derivation using your split logic (artist - title)
+    gen_artist, gen_title = generateMetadata(prefix, handler)
+
+    # Existing metadata presence
+    existing_artist = meta.get('artist') or ""
+    existing_title  = meta.get('title')  or ""
+
+    need_artist = not existing_artist
+    need_title  = not existing_title
+
+    # --- Title-only candidate from filename (no split) ---
+    # This is used when we want to derive just a title, keeping existing artist.
+    title_only_candidate = sanitizeString(prefix, handler)
+    title_only_candidate = clean_final(title_only_candidate)
+
+    # --- Smart fallback logic ---
+    if need_artist and need_title:
+        # No existing metadata at all -> use generated
+        final_artist_raw = gen_artist or ""
+        final_title_raw  = gen_title  or ""
+    elif (not need_artist) and need_title:
+        # Artist exists, title missing
+        # If filename does NOT resemble the artist, treat entire sanitized filename as the title
+        if not filename_resembles_artist(title_only_candidate, existing_artist):
+            final_artist_raw = existing_artist                # keep artist
+            final_title_raw  = title_only_candidate or gen_title or ""  # derive title-only
         else:
-            if INSERT == True:
-                # Remember that 'hander' indicates whether YouTube processed this file
-                print("Calling generateMetadata on %s, %s" % (prefix, alreadyMetadata['handler']))
-                newMetadata = generateMetadata(prefix, alreadyMetadata['handler'])
-                print("For filename %s: " % filename)
-                print("Using metadata %s" % str(newMetadata))
-                print("Contained metadata %s" % str(alreadyMetadata))
-                replaceMetadata(filename, artist=newMetadata[0], title=newMetadata[1])
-            else:
-                print("Instructed not to add metadata to %s" % filename)
+            # Filename resembles artist; fall back to generated split
+            final_artist_raw = existing_artist
+            final_title_raw  = gen_title or title_only_candidate or ""
     else:
-        print("Skipping: %s" % filename)
+        # Other cases:
+        # - Artist missing but title exists
+        # - Both exist (and FORCE may be set)
+        final_artist_raw = (gen_artist if (need_artist or FORCE) else existing_artist)
+        final_title_raw  = (gen_title  if (need_title  or FORCE) else existing_title)
+
+    # ---- Final cleanup on both fields; NEVER returns None ----
+    final_artist = clean_final(final_artist_raw)
+    final_title  = clean_final(final_title_raw)
 
 
+    print(f"  Existing: artist={meta.get('artist')!r}, title={meta.get('title')!r}, version={meta.get('version')!r}, handler={meta.get('handler')!r}")
+    print(f"  Derived : artist={gen_artist!r}, title={gen_title!r} (from prefix: {prefix!r})")
+    print(f"  Planned : artist={final_artist!r}, title={final_title!r}")
 
+    if DRYRUN:
+        if INSERT or FORCE:
+            print("  Action : [dry-run] Would update metadata (no write).")
+        else:
+            print("  Action : [dry-run] -m/--insert not set; would NOT write.")
+        continue
+
+    if INSERT or FORCE:
+        ok = replaceMetadata(filename, artist=final_artist or "", title=final_title or "")
+        if ok:
+            print("  ✔ Updated metadata.")
+        else:
+            print("  ✖ Failed to update metadata.")
+    else:
+        print("  Instructed not to add metadata (-m/--insert not set).")
