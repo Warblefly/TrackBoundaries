@@ -23,7 +23,7 @@ This is how to import a playlist.
 18. Click on the file you **don't** want to keep. Consider sample rate, bitrate and other factors. This turns the entry, and all identical entries, red.
 19. Having traversed the entire table, look for the list of files at the bottom. Click SAVE to save this list as a text file.
 20. From the directory containing all music files, run the weeding program:\
-`../weedplaylist.py ../<ORIGINAL_PLAYLIST> ../<TEXT_LIST_OF_FILES_TO_REMOVE>`
+`../weedplaylist.py --move ../<ORIGINAL_PLAYLIST> ../<TEXT_LIST_OF_FILES_TO_REMOVE>`
 18. Two files are output: one ends '\_weedsonly.m3u8', being files removed from the original playlist; another ends '\_weeded.m3u8', being the playlist of files remaining. There is also a new directory within the music files directory, that the weeded music files are moved into.
 19. Replace your on-air playlist with the file ending '\_weeded.m3u8'.
 20. Keep the weeded files carefully.
