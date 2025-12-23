@@ -37,7 +37,7 @@ def run(cmd):
     Returns:
         Tuple of (return_code, stdout_text, stderr_text)
     """
-    p = subprocess. Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess. PIPE, text=True)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess. PIPE, text=True)
     out, err = p.communicate()
     return p.returncode, out, err
 
@@ -141,7 +141,7 @@ def main():
     """
     # Recursively search for all .mka files (Matroska Audio container)
     for p in ROOT_DIR.rglob("*.mka"):
-        print(f"→ Checking:  {p}")
+        print(f"→ Checking: {p}")
         
         # Skip if the file contains non-FLAC audio or is not a valid audio file
         if not audio_codecs_are_all_flac(p):
@@ -157,7 +157,7 @@ def main():
         print("   ✗ Broken FLAC detected (decode errors found).")
         
         # Create temporary output filename (prefixed with .  to keep it hidden during processing)
-        out_tmp = p.with_name(f". reflac.{p.name}. tmp.mka")
+        out_tmp = p.with_name(f".reflac.{p.name}.tmp.mka")
 
         # Re-encode the FLAC audio with maximum compression
         print("   → Re-encoding audio to FLAC (compression_level=12), preserving metadata/chapters/attachments…")
@@ -177,7 +177,7 @@ def main():
         backup = p.with_suffix(p.suffix + ".bak")
         print(f"   → Replacing original (backup: {backup})")
         
-        # Rename original to . bak (atomic operation, creates backup)
+        # Rename original to .bak (atomic operation, creates backup)
         p.rename(backup)
         
         # Rename temporary re-encoded file to original name
