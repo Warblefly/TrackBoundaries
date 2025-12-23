@@ -8,6 +8,7 @@ import string
 import glob
 import tempfile
 import re
+import shutil
 from typing import Optional, Dict, Any, Tuple, List
 
 # Version embedded in MISSINGMETADATAVERSION tag
@@ -61,15 +62,24 @@ def run_cmd(cmd: List[str]) -> Tuple[int, str]:
     except subprocess.CalledProcessError as e:
         return e.returncode, e.output.decode("utf-8", errors="replace")
 
-def safe_temp_with_suffix(suffix: str) -> str:
-    tf = tempfile.NamedTemporaryFile(delete=False)
-    tf.close()
-    path = tf.name
-    if suffix:
-        new_path = path + suffix
-        os.replace(path, new_path)
-        return new_path
-    return path
+def safe_temp_next_to(dest_path: str, suffix: str = "") -> str:
+    dest_dir = os.path.dirname(dest_path) or "."
+    fd, temp_path = tempfile.mkstemp(
+        dir=dest_dir,
+        prefix=".__tmp__",
+        suffix=suffix
+    )
+    os.close(fd)
+    return temp_path
+#def safe_temp_with_suffix(suffix: str) -> str:
+#    tf = tempfile.NamedTemporaryFile(delete=False)
+#    tf.close()
+#    path = tf.name
+#    if suffix:
+#        new_path = path + suffix
+#        shutil.move(path, new_path)
+#        return new_path
+#    return path
 
 def remove_md5_hashes(s: str) -> str:
     if s is None:
@@ -80,6 +90,8 @@ def remove_md5_hashes(s: str) -> str:
     s = _MD5_HEX_RE.sub('', s)
     s = re.sub(r'\s+', ' ', s).strip()
     return s
+
+
 
 
 def remove_bracketed_catalog_numbers(s: str, min_digits: int = 8) -> str:
@@ -172,7 +184,7 @@ def replaceMetadata(filename: str, artist: Optional[str] = "", title: Optional[s
     title  = "" if title is None else title
 
     fileExtension = os.path.splitext(filename)[1]
-    tempFile = safe_temp_with_suffix(fileExtension)
+    tempFile = safe_temp_next_to(filename, fileExtension)
 
     # Keep all streams, copy only, set container metadata
     cmd = [
@@ -200,6 +212,15 @@ def replaceMetadata(filename: str, artist: Optional[str] = "", title: Optional[s
         except Exception:
             pass
         return False
+
+    # Ensure bytes are flushed before the change of name to help avoid
+    # tail corruption
+    try:
+        with open(tempFile, "rb") as f:
+            os.fsync(f.fileno())
+    except Exception:
+        # fsync might fail on some filesystems but we still must go on
+        pass
 
     try:
         os.replace(tempFile, filename)
@@ -310,7 +331,7 @@ def normalize_dashes(s: str) -> str:
 def sanitizeString(filename: str, handler: Optional[str] = None) -> str:
     s = filename
     s = removeYouTubeSuffix(s, handler)
-    
+
     # Remove trailing ./_/- followed by 24–32 hex chars BEFORE stripping numbers
     # This catches full MD5 (32) and fragments (e.g. 28) resulting from later number-strip
     s = _TRAILING_HEX_SEP_RE.sub('', s)
