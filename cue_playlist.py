@@ -1,5 +1,6 @@
 #!/usr/bin/python3
-
+# This program is superseded by nocue_playlist.py because Liquidsoap now handles
+# all cueing itself.
 import subprocess, argparse, os, os.path, random, string, tempfile, csv, re
 from pathlib import Path
 
