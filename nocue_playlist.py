@@ -68,15 +68,42 @@ def analyse(filename, mezzanine=None, forceEncode=False):
     if mezzanine:
         print("Creating mezzanine file.")
 
-        # We need a temporary filename for FFmpeg to write to. We can't write metadata in place, because
-        # the position of other elements in the file would change.
-        temporaryFile = tempfile.NamedTemporaryFile(delete=False).name + ".mka"
-        test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-i", filename, \
-                "-vn", "-acodec", "copy", temporaryFile], stderr=subprocess.STDOUT)).split('\\n')
-        shutil.move(temporaryFile, mezzanineName)
-    else:
-        print("We are NOT creating a new file.")
+#        # We need a temporary filename for FFmpeg to write to. We can't write metadata in place, because
+#        # the position of other elements in the file would change.
+#        temporaryFile = tempfile.NamedTemporaryFile(delete=False).name + ".mka"
+#        test = str(subprocess.check_output([FFMPEG, "-hide_banner", "-i", filename, \
+#                "-vn", "-acodec", "copy", temporaryFile], stderr=subprocess.STDOUT)).split('\\n')
+#        shutil.move(temporaryFile, mezzanineName)
+#    else:
+#        print("We are NOT creating a new file.")
+#
 
+        if mezzanineName == filename:
+            # No! FFmpeg can do bad things if replacing a file in-place
+            raise ValueError("mezzanineName must be different from filename!")
+
+        dest_dir = os.path.dirname(mezzanineName) or "."
+
+        if not os.path.isdir(dest_dir):
+            raise FileNotFoundError(f"Destination directory does not exist: {dest_dir}")
+
+        print("Creating mezzanine file.")
+
+        cmd = [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+               "-i", filename,
+               "-map", "0:a",
+               "-c", "copy",
+               "-map_metadata", "0",
+               "-map_metadata:s:a", "0:s:a",
+               "-map_chapters", "-1",
+               mezzanineName]
+        print("debug: CMD is %s" % cmd)
+        rc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print("debug: returned from FFmpeg")
+
+        if rc.returncode != 0:
+            raise RuntimeError(f"FFmpeg failed: {rc.stderr.decode(errors='ignore')}")
+        print("Mezzanine created at:", mezzanineName)
     return({"mezzanine_name": mezzanineName})
 
 
@@ -147,6 +174,3 @@ with open(outfile, mode="w") as out:
         #print("Fingerprint is:")
         #print(fing)
 print("Done.")
-
-
-
